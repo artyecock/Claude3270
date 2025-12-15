@@ -1,0 +1,26 @@
+#!/bin/bash
+
+echo "Compiling TN3270 Emulator with Enhanced UI..."
+
+mkdir -p bin
+
+javac -d bin -sourcepath src \
+    src/config/Constants.java \
+    src/TerminalModels.java \
+    src/util/EbcdicConverter.java \
+    src/util/AddressEncoder.java \
+    src/callbacks/*.java \
+    src/config/*.java \
+    src/terminal/*.java \
+    src/protocol/*.java \
+    src/ui/*.java \
+    src/ui/dialogs/*.java \
+    src/ai/*.java \
+    src/TN3270Emulator.java
+
+if [ $? -eq 0 ]; then
+    echo "✓ Compilation successful!"
+else
+    echo "✗ Compilation failed!"
+    exit 1
+fi

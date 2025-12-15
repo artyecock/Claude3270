@@ -1,0 +1,488 @@
+package com.tn3270.ui;
+
+import com.tn3270.model.ScreenModel;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
+
+public class TerminalPanel extends JPanel {
+
+    private final ScreenModel screenModel;
+    private Font terminalFont;
+    private int charWidth;
+    private int charHeight;
+    private int charAscent;
+    private boolean isUpdatingSize = false;
+    
+    // Selection State
+    private int selectionStart = -1;
+    private int selectionEnd = -1;
+    private boolean selecting = false;
+
+    public enum CursorStyle { BLOCK, UNDERSCORE, I_BEAM }
+    private CursorStyle cursorStyle = CursorStyle.BLOCK;
+
+    public TerminalPanel(ScreenModel model) {
+        this.screenModel = model;
+        
+        // --- 1. SMART DEFAULT FONT SIZE ---
+        // Calculate a reasonable starting size based on column density.
+        // 80 cols -> 14pt
+        // 132 cols -> 11pt
+        // 160 cols (3290) -> 9pt
+        int fontSize = 14;
+        int cols = model.getCols();
+        if (cols >= 160) fontSize = 9;
+        else if (cols >= 132) fontSize = 11;
+        
+        this.terminalFont = new Font("Monospaced", Font.PLAIN, fontSize);
+        
+        setBackground(Color.BLACK);
+        setForeground(Color.GREEN);
+        setDoubleBuffered(true);
+        setFocusable(true);
+        setFocusTraversalKeysEnabled(false);
+
+        updateSize();
+        
+        addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                requestFocusInWindow();
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    int pos = screenPositionFromMouse(e.getX(), e.getY());
+                    if (pos >= 0) {
+                        selecting = true;
+                        selectionStart = pos;
+                        selectionEnd = pos;
+                        repaint();
+                    }
+                }
+            }
+            @Override public void mouseReleased(MouseEvent e) { selecting = false; }
+        });
+        
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override public void mouseDragged(MouseEvent e) {
+                if (selecting) {
+                    int pos = screenPositionFromMouse(e.getX(), e.getY());
+                    if (pos >= 0) { selectionEnd = pos; repaint(); }
+                }
+            }
+        });
+    }
+
+    /**
+     * AUTO-FIT LOGIC
+     * Iteratively finds the largest font that allows the screen model 
+     * to fit within the given width/height without scrollbars.
+     */
+    public void fitToSize(int availableWidth, int availableHeight) {
+        if (availableWidth <= 0 || availableHeight <= 0) return;
+        
+        // Padding (borders, scrollbar margins)
+        int padding = 25; 
+        int targetW = availableWidth - padding;
+        int targetH = availableHeight - padding;
+
+        int bestSize = 6; // Minimum legible size
+        
+        // Loop from a reasonable max down to min to find the first fit
+        for (int s = 72; s >= 6; s--) {
+            Font testFont = new Font("Monospaced", Font.PLAIN, s);
+            FontMetrics fm = getFontMetrics(testFont);
+            
+            int totalW = fm.charWidth('M') * screenModel.getCols();
+            int totalH = fm.getHeight() * screenModel.getRows();
+            
+            if (totalW <= targetW && totalH <= targetH) {
+                bestSize = s;
+                break; // Found the largest that fits!
+            }
+        }
+        
+        // Apply
+        setFont(new Font("Monospaced", Font.PLAIN, bestSize));
+    }
+
+    public void updateSize() {
+        if (isUpdatingSize || screenModel == null) return;
+        isUpdatingSize = true;
+        try {
+            Font f = (terminalFont != null) ? terminalFont : getFont();
+            if (f == null) return;
+
+            FontMetrics fm = getFontMetrics(f);
+            this.charWidth = fm.charWidth('M');
+            this.charHeight = fm.getHeight();
+            this.charAscent = fm.getAscent();
+
+            int cols = screenModel.getCols();
+            int rows = screenModel.getRows();
+            
+            int w = (cols * charWidth) + 20;
+            int h = (rows * charHeight) + 20;
+            setPreferredSize(new Dimension(w, h));
+            revalidate();
+            repaint();
+        } finally {
+            isUpdatingSize = false;
+        }
+    }
+
+    @Override
+    public void setFont(Font f) {
+        super.setFont(f);
+        this.terminalFont = f;
+        updateSize();
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        if (screenModel == null) return;
+        
+        Graphics2D g2d = (Graphics2D) g;
+        
+        // --- 1. ENABLE ANTIALIASING ---
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        // --- 2. CALCULATE GEOMETRY ---
+        int cols = screenModel.getCols();
+        int rows = screenModel.getRows();
+        
+        // Calculate the "perfect" size of the grid at the current font size
+        int gridWidth = cols * charWidth;
+        int gridHeight = rows * charHeight;
+        
+        // --- 3. STRETCH LOGIC (The Fix) ---
+        // Instead of centering with margins, we calculate a scale factor
+        // to make the grid exactly fill the available panel size.
+        double scaleX = (double) getWidth() / (double) gridWidth;
+        double scaleY = (double) getHeight() / (double) gridHeight;
+        
+        // Save the original transform so we can restore it (good practice)
+        java.awt.geom.AffineTransform oldTransform = g2d.getTransform();
+        
+        // Apply scaling. This eliminates the black bands.
+        // We only scale if the content exists (>0) to avoid divide-by-zero
+        if (gridWidth > 0 && gridHeight > 0) {
+            g2d.scale(scaleX, scaleY);
+        }
+
+        // --- 4. DRAWING (Standard logic, but now coordinate space is scaled) ---
+        g2d.setFont(terminalFont);
+
+        char[] buffer = screenModel.getBuffer();
+        byte[] attr = screenModel.getAttributes();
+        byte[] extColors = screenModel.getExtendedColors();
+        byte[] highlight = screenModel.getHighlight();
+        Color[] palette = screenModel.getPalette();
+
+        // Note: Margins are now effectively 0 because we are scaling to fit.
+        // We start drawing at 0,0 relative to the scaled context.
+        int marginLeft = 0; 
+        int marginTop = 0;
+
+        boolean blinkVisible = (System.currentTimeMillis() / 500) % 2 == 0;
+
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                int pos = row * cols + col;
+                if (pos >= buffer.length) break;
+
+                // --- Standard Character Logic ---
+                char c = buffer[pos];
+                if (screenModel.isFieldStart(pos)) c = ' ';
+                if (c == '\0') c = ' ';
+
+                Color fg = getForeground();
+                Color bg = getBackground();
+                boolean reverse = false;
+                boolean underscore = false;
+                boolean isHidden = false;
+
+                int fieldStart = screenModel.findFieldStart(pos);
+                byte a = (fieldStart >= 0) ? attr[fieldStart] : 0;
+                
+                if ((a & 0x0C) == 0x0C) { isHidden = true; c = ' '; }
+
+                if (!isHidden) {
+                    if (extColors[pos] > 0 && extColors[pos] < palette.length) {
+                        fg = palette[extColors[pos]];
+                    } else if (fieldStart >= 0) {
+                        byte fieldColor = extColors[fieldStart];
+                        if (fieldColor > 0 && fieldColor < palette.length) fg = palette[fieldColor];
+                        else {
+                            boolean high = (a & 0x08) != 0;
+                            boolean prot = (a & 0x20) != 0;
+                            if (prot && high) fg = palette[7];
+                            else if (prot)    fg = palette[5];
+                            else if (high)    fg = palette[2];
+                            else              fg = palette[4];
+                        }
+                    }
+
+                    byte hl = highlight[pos];
+                    if (hl == 0 && fieldStart >= 0) hl = highlight[fieldStart];
+                    if (hl == 0xF1 && !blinkVisible) c = ' ';
+                    if (hl == 0xF2) reverse = true;
+                    if (hl == 0xF4) underscore = true;
+                }
+
+                if (isPosSelected(pos)) {
+                    fg = Color.WHITE;
+                    bg = new Color(0, 120, 215);
+                    reverse = false;
+                }
+
+                int x = marginLeft + (col * charWidth);
+                int y = marginTop + (row * charHeight);
+
+                if (reverse) { Color tmp = fg; fg = bg; bg = tmp; }
+
+                if (!bg.equals(getBackground())) {
+                    g2d.setColor(bg);
+                    g2d.fillRect(x, y, charWidth, charHeight);
+                }
+
+                g2d.setColor(fg);
+                g2d.drawString(String.valueOf(c), x, y + charAscent);
+
+                if (underscore && !isHidden) {
+                    g2d.drawLine(x, y + charAscent + 2, x + charWidth, y + charAscent + 2);
+                }
+            }
+        }
+        
+        // --- 5. DRAW CURSOR ---
+        if (!screenModel.isKeyboardLocked() && hasFocus()) {
+            int cPos = screenModel.getCursorPos();
+            if (cPos >= 0 && cPos < buffer.length) {
+                int cRow = cPos / cols;
+                int cCol = cPos % cols;
+                int cx = marginLeft + (cCol * charWidth);
+                int cy = marginTop + (cRow * charHeight);
+
+                g2d.setColor(screenModel.getCursorColor());
+                
+                if (cursorStyle == CursorStyle.BLOCK) {
+                    g2d.setXORMode(getBackground());
+                    g2d.fillRect(cx, cy, charWidth, charHeight);
+                    g2d.setPaintMode();
+                } else if (cursorStyle == CursorStyle.UNDERSCORE) {
+                    g2d.fillRect(cx, cy + charHeight - 2, charWidth, 2);
+                } else {
+                    g2d.fillRect(cx, cy, 2, charHeight);
+                }
+            }
+        }
+        
+        // Restore context (prevents weird issues if other things paint on top)
+        g2d.setTransform(oldTransform);
+    }
+    
+    /*
+    @Override
+    protected void paintComponentOld(Graphics g) {
+        super.paintComponent(g);
+        if (screenModel == null) return;
+        
+        if (g instanceof Graphics2D) {
+            ((Graphics2D)g).setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        }
+
+        g.setFont(terminalFont);
+
+        int cols = screenModel.getCols();
+        int rows = screenModel.getRows();
+        char[] buffer = screenModel.getBuffer();
+        byte[] attr = screenModel.getAttributes();
+        byte[] extColors = screenModel.getExtendedColors();
+        byte[] highlight = screenModel.getHighlight();
+        Color[] palette = screenModel.getPalette();
+
+        int gridWidth = cols * charWidth;
+        int gridHeight = rows * charHeight;
+        int marginLeft = Math.max(10, (getWidth() - gridWidth) / 2);
+        int marginTop = Math.max(10, (getHeight() - gridHeight) / 2);
+
+        boolean blinkVisible = (System.currentTimeMillis() / 500) % 2 == 0;
+
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                int pos = row * cols + col;
+                if (pos >= buffer.length) break;
+
+                char c = buffer[pos];
+                if (screenModel.isFieldStart(pos)) c = ' ';
+                if (c == '\0') c = ' ';
+
+                Color fg = getForeground();
+                Color bg = getBackground();
+                boolean reverse = false;
+                boolean underscore = false;
+                boolean isHidden = false;
+
+                int fieldStart = screenModel.findFieldStart(pos);
+                byte a = (fieldStart >= 0) ? attr[fieldStart] : 0;
+                
+                if ((a & 0x0C) == 0x0C) {
+                    isHidden = true;
+                    c = ' '; 
+                }
+
+                if (!isHidden) {
+                    if (extColors[pos] > 0 && extColors[pos] < palette.length) {
+                        fg = palette[extColors[pos]];
+                    } 
+                    else if (fieldStart >= 0) {
+                        byte fieldColor = extColors[fieldStart];
+                        if (fieldColor > 0 && fieldColor < palette.length) {
+                            fg = palette[fieldColor];
+                        } else {
+                            boolean high = (a & 0x08) != 0;
+                            boolean prot = (a & 0x20) != 0;
+                            if (prot && high) fg = palette[7]; 
+                            else if (prot)    fg = palette[5]; 
+                            else if (high)    fg = palette[2]; 
+                            else              fg = palette[4]; 
+                        }
+                    }
+
+                    byte hl = highlight[pos];
+                    if (hl == 0 && fieldStart >= 0) hl = highlight[fieldStart];
+                    
+                    if (hl == 0xF1 && !blinkVisible) c = ' '; 
+                    if (hl == 0xF2) reverse = true;           
+                    if (hl == 0xF4) underscore = true;        
+                }
+
+                if (isPosSelected(pos)) {
+                    fg = Color.WHITE;
+                    bg = new Color(0, 120, 215);
+                    reverse = false;
+                }
+
+                int x = marginLeft + (col * charWidth);
+                int y = marginTop + (row * charHeight);
+
+                if (reverse) { Color tmp = fg; fg = bg; bg = tmp; }
+
+                if (!bg.equals(getBackground())) {
+                    g.setColor(bg);
+                    g.fillRect(x, y, charWidth, charHeight);
+                }
+
+                g.setColor(fg);
+                g.drawString(String.valueOf(c), x, y + charAscent);
+
+                if (underscore && !isHidden) {
+                    g.drawLine(x, y + charAscent + 2, x + charWidth, y + charAscent + 2);
+                }
+            }
+        }
+        
+        if (!screenModel.isKeyboardLocked() && hasFocus()) {
+            int cPos = screenModel.getCursorPos();
+            if (cPos >= 0 && cPos < buffer.length) {
+                int cRow = cPos / cols;
+                int cCol = cPos % cols;
+                int cx = marginLeft + (cCol * charWidth);
+                int cy = marginTop + (cRow * charHeight);
+
+                g.setColor(screenModel.getCursorColor());
+                
+                if (cursorStyle == CursorStyle.BLOCK) {
+                    g.setXORMode(getBackground());
+                    g.fillRect(cx, cy, charWidth, charHeight);
+                    g.setPaintMode();
+                } else if (cursorStyle == CursorStyle.UNDERSCORE) {
+                    g.fillRect(cx, cy + charHeight - 2, charWidth, 2);
+                } else {
+                    g.fillRect(cx, cy, 2, charHeight);
+                }
+            }
+        }
+    }
+    */
+    
+    private boolean isPosSelected(int pos) {
+        if (selectionStart < 0 || selectionEnd < 0) return false;
+        int s = Math.min(selectionStart, selectionEnd);
+        int e = Math.max(selectionStart, selectionEnd);
+        return pos >= s && pos <= e;
+    }
+
+    private int screenPositionFromMouse(int x, int y) {
+        if (screenModel == null) return -1;
+        
+        int cols = screenModel.getCols();
+        int rows = screenModel.getRows();
+        
+        // Current Scale Factors
+        int gridWidth = cols * charWidth;
+        int gridHeight = rows * charHeight;
+        
+        // Protect against divide by zero
+        if (gridWidth == 0 || gridHeight == 0) return -1;
+
+        double scaleX = (double) getWidth() / (double) gridWidth;
+        double scaleY = (double) getHeight() / (double) gridHeight;
+
+        // "Un-scale" the mouse coordinates to find the logical position
+        int logicalX = (int) (x / scaleX);
+        int logicalY = (int) (y / scaleY);
+
+        int col = logicalX / charWidth;
+        int row = logicalY / charHeight;
+
+        if (col >= 0 && col < cols && row >= 0 && row < rows) {
+            return row * cols + col;
+        }
+        return -1;
+    }
+    
+    /*
+    private int screenPositionFromMouse(int x, int y) {
+        if (screenModel == null) return -1;
+        int cols = screenModel.getCols();
+        int rows = screenModel.getRows();
+        int gridWidth = cols * charWidth;
+        int gridHeight = rows * charHeight;
+        int marginLeft = Math.max(10, (getWidth() - gridWidth) / 2);
+        int marginTop = Math.max(10, (getHeight() - gridHeight) / 2);
+
+        int col = (x - marginLeft) / charWidth;
+        int row = (y - marginTop) / charHeight;
+
+        if (col >= 0 && col < cols && row >= 0 && row < rows) {
+            return row * cols + col;
+        }
+        return -1;
+    }
+    */
+
+    public void setCursorStyle(CursorStyle style) { this.cursorStyle = style; repaint(); }
+    public Font getTerminalFont() { return terminalFont; }
+    
+    // Selection Helpers
+    public void clearSelection() { selectionStart = -1; selectionEnd = -1; repaint(); }
+    public void selectAll() { selectionStart = 0; selectionEnd = screenModel.getSize() - 1; repaint(); }
+    public String getSelectedText() {
+        if (selectionStart < 0 || selectionEnd < 0) return "";
+        int s = Math.min(selectionStart, selectionEnd);
+        int e = Math.max(selectionStart, selectionEnd);
+        StringBuilder sb = new StringBuilder();
+        int cols = screenModel.getCols();
+        for (int i = s; i <= e; i++) {
+            char c = screenModel.getChar(i);
+            sb.append(c == '\0' ? ' ' : c);
+            if ((i + 1) % cols == 0) sb.append('\n');
+        }
+        return sb.toString().trim();
+    }
+    public boolean hasSelection() { return selectionStart >= 0 && selectionEnd >= 0; }
+}

@@ -1,0 +1,70 @@
+package ai;
+
+
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.OutputStream;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.nio.charset.StandardCharsets;
+
+
+public class OllamaProvider implements AIModelProvider {
+private final String endpoint; // e.g. http://localhost:11434/api/generate
+
+
+public OllamaProvider(String endpoint) {
+this.endpoint = endpoint;
+}
+
+
+@Override
+public String ask(String model, String prompt) throws Exception {
+URL u = new URL(endpoint);
+HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+conn.setRequestMethod("POST");
+conn.setDoOutput(true);
+conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+
+
+String payload = "{\"model\":\"" + model + "\",\"prompt\":" + quote(prompt) + "}";
+byte[] out = payload.getBytes(StandardCharsets.UTF_8);
+conn.setFixedLengthStreamingMode(out.length);
+conn.connect();
+try (OutputStream os = conn.getOutputStream()) { os.write(out); }
+
+
+int code = conn.getResponseCode();
+InputStreamReader isr = new InputStreamReader(
+code >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8);
+try (BufferedReader br = new BufferedReader(isr)) {
+StringBuilder sb = new StringBuilder();
+String line;
+while ((line = br.readLine()) != null) sb.append(line).append('\n');
+return sb.toString();
+}
+}
+
+
+private static String quote(String s) {
+if (s == null) return "\"\"";
+StringBuilder sb = new StringBuilder();
+sb.append('"');
+for (int i = 0; i < s.length(); i++) {
+char c = s.charAt(i);
+switch (c) {
+case '"': sb.append("\\\""); break;
+case '\\': sb.append("\\\\"); break;
+case '\n': sb.append("\\n"); break;
+case '\r': sb.append("\\r"); break;
+case '\t': sb.append("\\t"); break;
+default:
+if (c < 0x20) {
+sb.append(String.format("\\u%04x", (int)c));
+} else sb.append(c);
+}
+}
+sb.append('"');
+return sb.toString();
+}
+}

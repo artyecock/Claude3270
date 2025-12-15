@@ -1,0 +1,576 @@
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.*;
+import javax.net.ssl.*;
+import java.util.*;
+import ui.TerminalCanvas;
+
+/**
+ * Main TN3270 Terminal Emulator class.
+ * Integrates all components and provides the main application framework.
+ */
+public class TN3270Emulator extends Frame implements 
+    DataStreamListener, 
+    ProtocolCallback,
+    TelnetCallback,
+    InputCallback,
+    TransferCallback {
+    
+    // Core components
+    private ScreenBuffer screenBuffer;
+    private CursorManager cursorManager;
+    private InputHandler inputHandler;
+    
+    // Protocol components
+    private TelnetProtocol telnetProtocol;
+    private TN3270Protocol tn3270Protocol;
+    private DataStreamReader dataStreamReader;
+    private FileTransferManager fileTransferManager;
+    private FileTransferProtocol fileTransferProtocol;
+    
+    // Configuration
+    private ColorScheme currentColorScheme;
+    private Map<Integer, KeyMapping> keyMap;
+    
+    // Connection
+    private Socket socket;
+    private InputStream input;
+    private OutputStream output;
+    private volatile boolean connected = false;
+    private boolean useTLS = false;
+    
+    // Terminal state
+    private String model;
+    private int rows;
+    private int cols;
+    private int primaryRows;
+    private int primaryCols;
+    private int alternateRows;
+    private int alternateCols;
+    
+    // UI components (to be created in Phase 6/7)
+    // For now, we'll use simple placeholders
+    private Canvas canvas;
+    private Label statusLabel;
+    
+    /**
+     * Create a new TN3270 Emulator with specified model.
+     */
+    public TN3270Emulator(String modelName) {
+        super("TN3270 Emulator - " + modelName);
+        
+        this.model = modelName;
+        
+        // Get model dimensions
+        Dimension dim = TerminalModels.getDimensions(model);
+        if (dim == null) {
+            System.err.println("Unknown model: " + model + ", using 3278-2");
+            this.model = "3278-2";
+            dim = TerminalModels.getDimensions(this.model);
+        }
+        
+        // Set up screen sizes
+        if (!model.endsWith("-2")) {
+            primaryRows = 24;
+            primaryCols = 80;
+            alternateRows = dim.height;
+            alternateCols = dim.width;
+        } else {
+            primaryRows = dim.height;
+            primaryCols = dim.width;
+            alternateRows = dim.height;
+            alternateCols = dim.width;
+        }
+        
+        // Start with alternate size
+        rows = alternateRows;
+        cols = alternateCols;
+        
+        // Initialize components
+        initializeComponents();
+        
+        // Set up UI
+        setupUI();
+        
+        // Window listener
+        addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                disconnect();
+                dispose();
+                System.exit(0);
+            }
+        });
+        
+        pack();
+        setVisible(true);
+    }
+    
+    /**
+     * Initialize all core components.
+     */
+    private void initializeComponents() {
+        // Create screen buffer
+        screenBuffer = new ScreenBuffer(rows, cols);
+        
+        // Create cursor manager
+        cursorManager = new CursorManager(screenBuffer);
+        
+        // Load/initialize key mappings
+        keyMap = new HashMap<>();
+        KeyMapping.initializeDefaultMappings(keyMap);
+        KeyMapping.loadKeyMappings(keyMap);
+        
+        // Create input handler
+        inputHandler = new InputHandler(screenBuffer, cursorManager, keyMap, this);
+        
+        // Load color scheme
+        currentColorScheme = ColorScheme.getScheme("Green on Black (Classic)");
+        if (currentColorScheme == null) {
+            currentColorScheme = new ColorScheme(
+                Color.BLACK,
+                Color.GREEN,
+                Color.WHITE,
+                new Color[] {
+                    Color.BLACK, Color.BLUE, Color.RED, Color.MAGENTA,
+                    Color.GREEN, Color.CYAN, Color.YELLOW, Color.WHITE
+                }
+            );
+        }
+        
+        // File transfer manager
+        fileTransferManager = new FileTransferManager();
+    }
+    
+    /**
+     * Set up basic UI (placeholders for now).
+     */
+    private void setupUI() {
+        setLayout(new BorderLayout());
+        
+        // Simple canvas placeholder
+        //canvas = new Canvas() {
+	canvas = new TerminalCanvas(cols, rows);
+canvas.setScreenBuffer(screenBuffer);
+canvas.setColorScheme(currentColorScheme);
+canvas.addKeyListener(this);  // Still needed for keyboard input
+
+// Setup selection listener
+canvas.setSelectionListener(new TerminalCanvas.SelectionListener() {
+    @Override
+    public void onSelectionChanged(int start, int end) {
+        // Optional: Update status bar with selection length
+    }
+    
+    @Override
+    public void onDoubleClick(int position) {
+        // Optional: Handle double-click actions
+    }
+    
+    @Override
+    public void onTripleClick(int position) {
+        // Optional: Handle triple-click actions
+    }
+});
+            public void paint(Graphics g) {
+                g.setColor(currentColorScheme.getBackground());
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setColor(currentColorScheme.getDefaultForeground());
+                g.setFont(new Font("Monospaced", Font.PLAIN, 14));
+                
+                // Draw buffer contents
+                FontMetrics fm = g.getFontMetrics();
+                int charWidth = fm.charWidth('M');
+                int charHeight = fm.getHeight();
+                
+                for (int row = 0; row < rows; row++) {
+                    for (int col = 0; col < cols; col++) {
+                        int pos = row * cols + col;
+                        char c = screenBuffer.getChar(pos);
+                        if (c == '\0') c = ' ';
+                        
+                        int x = 5 + col * charWidth;
+                        int y = 5 + row * charHeight + charHeight - 3;
+                        
+                        g.drawString(String.valueOf(c), x, y);
+                    }
+                }
+                
+                // Draw cursor
+                if (!tn3270Protocol.isKeyboardLocked()) {
+                    int cursorPos = cursorManager.getCursorPos();
+                    int row = cursorPos / cols;
+                    int col = cursorPos % cols;
+                    int x = 5 + col * charWidth;
+                    int y = 5 + row * charHeight;
+                    
+                    g.setColor(currentColorScheme.getCursor());
+                    g.fillRect(x, y + charHeight - 3, charWidth, 2);
+                }
+            }
+            
+            public Dimension getPreferredSize() {
+                FontMetrics fm = getFontMetrics(new Font("Monospaced", Font.PLAIN, 14));
+                int charWidth = fm.charWidth('M');
+                int charHeight = fm.getHeight();
+                return new Dimension(cols * charWidth + 10, rows * charHeight + 10);
+            }
+        };
+        
+        canvas.setBackground(currentColorScheme.getBackground());
+        canvas.addKeyListener(inputHandler);
+        canvas.setFocusable(true);
+        add(canvas, BorderLayout.CENTER);
+        
+        // Simple status bar
+        statusLabel = new Label("Not connected");
+        statusLabel.setBackground(Color.DARK_GRAY);
+        statusLabel.setForeground(Color.WHITE);
+        add(statusLabel, BorderLayout.SOUTH);
+    }
+    
+    /**
+     * Connect to host.
+     */
+    public void connect(String hostname, int port) {
+        try {
+            if (useTLS) {
+                SSLSocketFactory factory = createTrustAllSSLSocketFactory();
+                socket = factory.createSocket(hostname, port);
+                
+                if (socket instanceof SSLSocket) {
+                    SSLSocket sslSocket = (SSLSocket) socket;
+                    sslSocket.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.3" });
+                    sslSocket.startHandshake();
+                }
+                
+                statusLabel.setText("TLS connected to " + hostname + ":" + port);
+            } else {
+                socket = new Socket(hostname, port);
+                statusLabel.setText("Connected to " + hostname + ":" + port);
+            }
+            
+            input = socket.getInputStream();
+            output = socket.getOutputStream();
+            connected = true;
+            
+            // Initialize protocol components now that we have streams
+            telnetProtocol = new TelnetProtocol(output, model);
+            telnetProtocol.setCallback(this);
+            
+            tn3270Protocol = new TN3270Protocol(
+                output, 
+                screenBuffer, 
+                telnetProtocol,
+                primaryRows, 
+                primaryCols,
+                alternateRows, 
+                alternateCols
+            );
+            tn3270Protocol.setCallback(this);
+            
+            fileTransferProtocol = new FileTransferProtocol(
+                output,
+                telnetProtocol,
+                fileTransferManager
+            );
+            fileTransferProtocol.setCallback(this);
+            
+            // Start data stream reader
+            dataStreamReader = new DataStreamReader(input, telnetProtocol, this);
+            dataStreamReader.start();
+            
+            canvas.requestFocus();
+            
+        } catch (IOException e) {
+            statusLabel.setText("Connection failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Disconnect from host.
+     */
+    public void disconnect() {
+        connected = false;
+        
+        if (dataStreamReader != null) {
+            dataStreamReader.stop();
+        }
+        
+        try {
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (IOException e) {
+            // Ignore
+        }
+        
+        statusLabel.setText("Disconnected");
+    }
+    
+    /**
+     * Create SSL socket factory that trusts all certificates.
+     */
+    private SSLSocketFactory createTrustAllSSLSocketFactory() {
+        try {
+            TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+                    public void checkClientTrusted(
+                        java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+                    public void checkServerTrusted(
+                        java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+                }
+            };
+            
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+            return sc.getSocketFactory();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            return (SSLSocketFactory) SSLSocketFactory.getDefault();
+        }
+    }
+    
+    // ===== DataStreamListener Implementation =====
+    
+    @Override
+    public void on3270Data(byte[] data) {
+        // Check if this is a Data Chain (file transfer) command
+        if (data.length >= 3 && data[0] == Constants.SFID_DATA_CHAIN) {
+            fileTransferProtocol.handleDataChain(data, 0, data.length);
+        } else {
+            tn3270Protocol.process3270Data(data);
+        }
+    }
+    
+    @Override
+    public void onConnectionLost(String reason) {
+        connected = false;
+        statusLabel.setText(reason);
+    }
+    
+    @Override
+    public void onStatusUpdate(String message) {
+        statusLabel.setText(message);
+    }
+    
+    // ===== ProtocolCallback Implementation =====
+    
+    @Override
+    public void requestRepaint() {
+        if (canvas != null) {
+            canvas.repaint();
+        }
+    }
+    
+    @Override
+    public void updateStatus(String message) {
+        statusLabel.setText(message);
+    }
+    
+    @Override
+    public void setKeyboardLocked(boolean locked) {
+        // Update UI to show keyboard lock state
+        if (canvas != null) {
+            canvas.repaint();
+        }
+    }
+    
+    @Override
+    public void onScreenSizeChanged(int newRows, int newCols) {
+        this.rows = newRows;
+        this.cols = newCols;
+        canvas.setPreferredSize(canvas.getPreferredSize());
+        pack();
+        canvas.repaint();
+    }
+    
+    @Override
+    public void playAlarm() {
+        Toolkit.getDefaultToolkit().beep();
+    }
+    
+    // ===== TelnetCallback Implementation =====
+    
+    @Override
+    public void onTN3270EModeEnabled() {
+        statusLabel.setText("TN3270E mode active");
+    }
+    
+    @Override
+    public void onTN3270EModeFailed() {
+        statusLabel.setText("Using TN3270 mode");
+    }
+    
+    @Override
+    public String getTerminalType() {
+        return "IBM-" + model + "-E";
+    }
+    
+    @Override
+    public void onQueryRequested() {
+        // Query response is handled by TN3270Protocol
+    }
+    
+    // ===== InputCallback Implementation =====
+    
+    @Override
+    public void onAIDKey(byte aid) {
+        if (tn3270Protocol != null) {
+            tn3270Protocol.sendAID(aid);
+        }
+    }
+    
+    @Override
+    public void onClearScreen() {
+        screenBuffer.clearScreen();
+    }
+    
+    @Override
+    public void onRepaintRequested() {
+        if (canvas != null) {
+            canvas.repaint();
+        }
+    }
+    
+    @Override
+    public void onStatusUpdate() {
+        int cursorPos = cursorManager.getCursorPos();
+        int row = cursorPos / cols + 1;
+        int col = cursorPos % cols + 1;
+        String mode = inputHandler.isInsertMode() ? "Insert" : "Replace";
+        if (tn3270Protocol != null && tn3270Protocol.isKeyboardLocked()) {
+            mode += " [LOCKED]";
+        }
+        statusLabel.setText(String.format("Pos: %03d/%03d | Mode: %s", row, col, mode));
+    }
+    
+    @Override
+    public void onInsertModeChanged(boolean insertMode) {
+        onStatusUpdate();
+    }
+    
+    @Override
+    public void onAlertSound() {
+        Toolkit.getDefaultToolkit().beep();
+    }
+    
+    @Override
+    public boolean isKeyboardLocked() {
+        return tn3270Protocol != null && tn3270Protocol.isKeyboardLocked();
+    }
+    
+    @Override
+    public boolean isConnected() {
+        return connected;
+    }
+    
+    // ===== TransferCallback Implementation =====
+    
+    @Override
+    public void onTransferStart(String filename, boolean isUpload) {
+        statusLabel.setText((isUpload ? "Uploading: " : "Downloading: ") + filename);
+    }
+    
+    @Override
+    public void onTransferProgress(int blockNumber, long bytesTransferred) {
+        statusLabel.setText(String.format("Block %d | %d bytes", blockNumber, bytesTransferred));
+    }
+    
+    @Override
+    public void onTransferComplete(String message) {
+        statusLabel.setText("Transfer complete: " + message);
+        showSimpleDialog("Transfer Complete", message);
+    }
+    
+    @Override
+    public void onTransferError(String reason) {
+        statusLabel.setText("Transfer error: " + reason);
+        showSimpleDialog("Transfer Error", reason);
+    }
+    
+    @Override
+    public void onStatusMessage(String message) {
+        statusLabel.setText(message);
+    }
+    
+    // ===== Helper Methods =====
+    
+    /**
+     * Show a simple message dialog.
+     */
+    private void showSimpleDialog(String title, String message) {
+        Dialog dialog = new Dialog(this, title, true);
+        dialog.setLayout(new BorderLayout(10, 10));
+        
+        Label label = new Label(message);
+        dialog.add(label, BorderLayout.CENTER);
+        
+        Button okButton = new Button("OK");
+        okButton.addActionListener(e -> dialog.dispose());
+        Panel buttonPanel = new Panel();
+        buttonPanel.add(okButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                dialog.dispose();
+            }
+        });
+        
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Set whether to use TLS.
+     */
+    public void setUseTLS(boolean useTLS) {
+        this.useTLS = useTLS;
+    }
+    
+    /**
+     * Main entry point.
+     */
+    public static void main(String[] args) {
+        if (args.length < 1) {
+            System.out.println("Usage: java TN3270Emulator <hostname> [port] [model] [options]");
+            System.out.println("Models: 3278-2 (24x80), 3278-3 (32x80), 3278-4 (43x80), 3278-5 (27x132)");
+            System.out.println("        3279-2 (24x80 Color), 3279-3 (32x80 Color)");
+            System.out.println("Options:");
+            System.out.println("  --tls        Use TLS/SSL encryption");
+            System.exit(1);
+        }
+        
+        String hostname = args[0];
+        int port = 23;
+        String model = "3279-3";
+        boolean useTLS = false;
+        
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--tls")) {
+                useTLS = true;
+            } else if (args[i].startsWith("3278-") || args[i].startsWith("3279-")) {
+                model = args[i].trim();
+            } else {
+                try {
+                    port = Integer.parseInt(args[i]);
+                } catch (NumberFormatException e) {
+                    // Ignore
+                }
+            }
+        }
+        
+        TN3270Emulator emulator = new TN3270Emulator(model);
+        emulator.setUseTLS(useTLS);
+        emulator.connect(hostname, port);
+    }
+}

@@ -1,0 +1,57 @@
+package ai;
+
+
+add(top, BorderLayout.NORTH);
+add(mid, BorderLayout.CENTER);
+add(new JScrollPane(answerArea), BorderLayout.SOUTH);
+
+
+askButton.addActionListener(e -> onAsk());
+
+
+pack();
+setLocationRelativeTo(owner);
+}
+
+
+private void onAsk() {
+if (!cfg.enabled) {
+answerArea.setText("AI is disabled in configuration.");
+return;
+}
+String model = (String) modelCombo.getSelectedItem();
+String question = questionArea.getText();
+String context = contextArea.getText();
+String prompt = "Context:\n" + context + "\n\nUser question:\n" + question;
+
+
+askButton.setEnabled(false);
+answerArea.setText("Thinking...\n");
+
+
+// Perform network call in background thread
+new Thread(() -> {
+try {
+AIModelProvider prov;
+switch (cfg.provider) {
+case "openai": prov = new OpenAIProvider(cfg.apiKey); break;
+case "ollama": prov = new OllamaProvider(cfg.endpoint); break;
+default: prov = new OpenAIProvider(cfg.apiKey); break;
+}
+String answer = prov.ask(model, prompt);
+SwingUtilities.invokeLater(() -> answerArea.setText(answer));
+} catch (Exception ex) {
+String msg = "Error: " + ex.getMessage();
+SwingUtilities.invokeLater(() -> answerArea.setText(msg));
+} finally {
+SwingUtilities.invokeLater(() -> askButton.setEnabled(true));
+}
+}).start();
+}
+
+
+public static void showDialog(Frame owner, String selectedText) {
+AIQueryDialog d = new AIQueryDialog(owner, selectedText);
+d.setVisible(true);
+}
+}

@@ -1,0 +1,683 @@
+package com.tn3270;
+
+import com.tn3270.ui.EnhancedRibbonToolbar;
+import com.tn3270.ui.ModernKeyboardPanel;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
+
+public class TN3270Emulator extends JFrame {
+
+    // =======================================================================
+    // 1. UI COMPONENTS & STATE
+    // =======================================================================
+    public JTabbedPane tabbedPane;
+    private EnhancedRibbonToolbar ribbon;
+    private ModernKeyboardPanel keyboardPanel;
+    
+    // Profile Persistence
+    private static final String PROFILES_FILE = System.getProperty("user.home") + File.separator + ".tn3270profiles";
+    private static final Map<String, ConnectionProfile> savedProfiles = new HashMap<>();
+
+    static {
+        loadProfiles();
+    }
+
+    // Inner class for Profiles (Application-level state)
+    public static class ConnectionProfile {
+        String name;
+        String hostname;
+        int port;
+        String model;
+        String luName;
+        boolean useTLS;
+
+        public ConnectionProfile(String name, String hostname, int port, String model, String luName, boolean useTLS) {
+            this.name = name;
+            this.hostname = hostname;
+            this.port = port;
+            this.model = model;
+            this.luName = luName;
+            this.useTLS = useTLS;
+        }
+
+        @Override
+        public String toString() {
+            return name + " (" + hostname + ":" + port + ")";
+        }
+    }
+
+    private static void loadProfiles() {
+        File file = new File(PROFILES_FILE);
+
+        if (!file.exists()) {
+            savedProfiles.put("Local z/VM", new ConnectionProfile("Local z/VM", "localhost", 23, "3279-3", "", false));
+            savedProfiles.put("Local z/OS", new ConnectionProfile("Local z/OS", "localhost", 23, "3279-3", "", false));
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts.length >= 5) {
+                    String name = parts[0];
+                    String host = parts[1];
+                    int port = 23;
+                    try { port = Integer.parseInt(parts[2]); } catch (Exception e) {}
+                    String model = parts[3];
+                    String luName = "";
+                    boolean useTLS = false;
+
+                    if (parts.length == 5) {
+                        useTLS = Boolean.parseBoolean(parts[4]);
+                    } else if (parts.length >= 6) {
+                        luName = parts[4];
+                        useTLS = Boolean.parseBoolean(parts[5]);
+                    }
+                    savedProfiles.put(name, new ConnectionProfile(name, host, port, model, luName, useTLS));
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error loading profiles: " + e.getMessage());
+        }
+    }
+
+    public static void saveProfiles() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(PROFILES_FILE))) {
+            for (ConnectionProfile profile : savedProfiles.values()) {
+                writer.write(profile.name + "," + profile.hostname + "," + profile.port + "," + profile.model + ","
+                        + (profile.luName == null ? "" : profile.luName) + "," + profile.useTLS);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.err.println("Could not save profiles: " + e.getMessage());
+        }
+    }
+    
+    public static Map<String, ConnectionProfile> getSavedProfiles() {
+        return savedProfiles;
+    }
+
+    // =======================================================================
+    // 2. CONSTRUCTOR & WINDOW INIT
+    // =======================================================================
+
+    public TN3270Emulator(String initialModel) {
+        super("TN3270 Emulator");
+        setLayout(new BorderLayout());
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+
+        // 1. Setup Tabs
+        tabbedPane = new JTabbedPane();
+        tabbedPane.addChangeListener(e -> {
+            TN3270Session s = getCurrentSession();
+            if (s != null) s.requestFocusInWindow();
+        });
+        add(tabbedPane, BorderLayout.CENTER);
+
+        // 2. Handle Initial Session
+        if (initialModel == null || initialModel.trim().isEmpty()) {
+            initialModel = "3279-3";
+        }
+        // Open the first tab (disconnected)
+        openNewSession(null, 0, initialModel, "", false);
+
+        // 3. Setup Menus
+        createMenuBar();
+        
+        // 4. Setup Toolbar (External Class)
+        ribbon = new EnhancedRibbonToolbar(this);
+        add(ribbon, BorderLayout.NORTH);
+
+        // 5. Setup Shared Keyboard (External Class)
+        keyboardPanel = new ModernKeyboardPanel(this);
+        add(keyboardPanel, BorderLayout.SOUTH);
+
+        // 6. Global Focus Handler
+        addWindowFocusListener(new WindowAdapter() {
+            public void windowGainedFocus(WindowEvent e) {
+                TN3270Session s = getCurrentSession();
+                if (s != null) s.requestFocusInWindow();
+            }
+        });
+
+        // 7. Window Close Handler
+        addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                // Loop through tabs and disconnect
+                for(int i=0; i<tabbedPane.getTabCount(); i++) {
+                    Component c = tabbedPane.getComponentAt(i);
+                    if(c instanceof TN3270Session) ((TN3270Session)c).disconnect();
+                }
+                System.exit(0);
+            }
+        });
+
+        // 8. Finalize Window
+        pack();
+        if (getWidth() < 1000) setSize(1100, 850);
+        setLocationRelativeTo(null); 
+        setVisible(true);
+    }
+
+// =======================================================================
+    // 3. SESSION MANAGEMENT
+    // =======================================================================
+
+    public TN3270Session getCurrentSession() {
+        if (tabbedPane.getTabCount() == 0) return null;
+        Component c = tabbedPane.getSelectedComponent();
+        if (c instanceof TN3270Session) return (TN3270Session) c;
+        return null;
+    }
+
+    public void openNewSession(String h, int p, String m, String l, boolean t) {
+        TN3270Session s = new TN3270Session(m, this);
+        s.setUseTLS(t);
+        s.setRequestedLuName(l);
+        tabbedPane.addTab(h == null ? "New Session" : h, s);
+        tabbedPane.setSelectedComponent(s);
+        if (h != null)
+            s.connect(h, p);
+    }
+
+    public void closeSession(TN3270Session s) {
+        s.disconnect();
+        tabbedPane.remove(s);
+        if (tabbedPane.getTabCount() == 0)
+            System.exit(0);
+    }
+
+    // =======================================================================
+    // 4. MAIN ENTRY POINT
+    // =======================================================================
+
+    public static void main(String[] args) {
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.contains("mac")) {
+            System.setProperty("apple.laf.useScreenMenuBar", "true");
+            System.setProperty("apple.awt.application.name", "TN3270");
+        }
+
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            System.err.println("Could not set look and feel: " + e.getMessage());
+        }
+
+        if (args.length == 0) {
+            showConnectionDialog();
+            return;
+        }
+
+        String hostname = null;
+        int port = 23;
+        String rawModel = "3278-2";
+        String luName = null;
+        boolean useTLS = false;
+
+        try {
+            for (int i = 0; i < args.length; i++) {
+                String arg = args[i];
+                switch (arg) {
+                    case "-h": case "--host":
+                        if (i + 1 < args.length) hostname = args[++i];
+                        else printUsageAndExit("Missing value for host");
+                        break;
+                    case "-p": case "--port":
+                        if (i + 1 < args.length) {
+                            try { port = Integer.parseInt(args[++i]); } 
+                            catch (NumberFormatException e) { printUsageAndExit("Invalid port: " + args[i]); }
+                        } else printUsageAndExit("Missing value for port");
+                        break;
+                    case "-m": case "--model":
+                        if (i + 1 < args.length) rawModel = args[++i];
+                        else printUsageAndExit("Missing value for model");
+                        break;
+                    case "-l": case "--luname":
+                        if (i + 1 < args.length) luName = args[++i];
+                        else printUsageAndExit("Missing value for LU Name");
+                        break;
+                    case "--tls":
+                        useTLS = true;
+                        break;
+                    case "--help": case "-?":
+                        printUsage();
+                        System.exit(0);
+                        break;
+                    default:
+                        if (!arg.startsWith("-") && hostname == null) hostname = arg;
+                        else printUsageAndExit("Unknown option: " + arg);
+                        break;
+                }
+            }
+        } catch (Exception e) {
+            printUsageAndExit("Error parsing arguments: " + e.getMessage());
+        }
+
+        if (hostname == null) {
+            printUsageAndExit("Hostname is required.");
+        }
+
+        String finalModel = normalizeModel(rawModel);
+
+        System.out.println("Connecting to " + hostname + ":" + port + " (" + (useTLS ? "TLS" : "Plain") + ")");
+        
+        TN3270Emulator emulator = new TN3270Emulator(finalModel);
+        TN3270Session blankSession = emulator.getCurrentSession();
+        if (blankSession != null) {
+            emulator.closeSession(blankSession);
+        }
+        emulator.openNewSession(hostname, port, finalModel, luName, useTLS);
+    }
+
+    private static String normalizeModel(String input) {
+        if (input == null) return "3278-2";
+        switch (input.trim()) {
+            case "2": return "3278-2";
+            case "3": return "3278-3";
+            case "4": return "3278-4";
+            case "5": return "3278-5";
+            default: return input.trim();
+        }
+    }
+
+    private static void printUsage() {
+        System.out.println("Usage: java TN3270Emulator [options] <hostname>");
+        System.out.println("Options:");
+        System.out.println("  -h, --host <name>    Target hostname");
+        System.out.println("  -p, --port <num>     Target port (default: 23)");
+        System.out.println("  -m, --model <id>     Terminal Model (2, 3, 4, 5 or '3279-3')");
+        System.out.println("  -l, --luname <name>  Specific LU Name (TN3270E)");
+        System.out.println("  --tls                Enable TLS/SSL");
+        System.out.println("  --help               Show this message");
+    }
+
+    private static void printUsageAndExit(String error) {
+        System.err.println("Error: " + error);
+        System.err.println();
+        printUsage();
+        System.exit(1);
+    }
+
+    // =======================================================================
+    // 5. MENU BAR CREATION
+    // =======================================================================
+
+    private void createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        int shortcutKey = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+
+        // ===== FILE MENU =====
+        JMenu fileMenu = new JMenu("File");
+
+        JMenuItem newConnItem = new JMenuItem("New Connection...");
+        newConnItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, shortcutKey));
+        newConnItem.addActionListener(e -> showConnectionDialog());
+        fileMenu.add(newConnItem);
+
+        fileMenu.addSeparator();
+
+        JMenuItem uploadItem = new JMenuItem("Upload to Host...");
+        uploadItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, shortcutKey));
+        uploadItem.addActionListener(e -> showFileTransferDialog(false));
+        fileMenu.add(uploadItem);
+
+        JMenuItem downloadItem = new JMenuItem("Download from Host...");
+        downloadItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_D, shortcutKey));
+        downloadItem.addActionListener(e -> showFileTransferDialog(true));
+        fileMenu.add(downloadItem);
+
+        fileMenu.addSeparator();
+
+        JMenuItem disconnectItem = new JMenuItem("Disconnect");
+        disconnectItem.addActionListener(e -> disconnect());
+        fileMenu.add(disconnectItem);
+
+        JMenuItem reconnectItem = new JMenuItem("Reconnect");
+        reconnectItem.addActionListener(e -> reconnect());
+        fileMenu.add(reconnectItem);
+
+        fileMenu.addSeparator();
+
+        JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, shortcutKey));
+        exitItem.addActionListener(e -> dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING)));
+        fileMenu.add(exitItem);
+
+        menuBar.add(fileMenu);
+
+        // ===== EDIT MENU =====
+        JMenu editMenu = new JMenu("Edit");
+        
+        String copyLabel = System.getProperty("os.name").toLowerCase().contains("mac") 
+                ? "Copy    \u2318C" : "Copy    Ctrl+C";
+
+        JMenuItem copyItem = new JMenuItem(copyLabel);
+        copyItem.addActionListener(e -> copySelection());
+        editMenu.add(copyItem);
+        
+        String pasteLabel = System.getProperty("os.name").toLowerCase().contains("mac") 
+                ? "Paste    \u2318V" : "Paste    Ctrl+V";
+
+        JMenuItem pasteItem = new JMenuItem(pasteLabel);
+        pasteItem.addActionListener(e -> pasteFromClipboard());
+        editMenu.add(pasteItem);
+
+        editMenu.addSeparator();
+
+        String selectAllLabel = System.getProperty("os.name").toLowerCase().contains("mac") 
+                ? "Select All    \u2318A" : "Select All    Ctrl+A";
+
+        JMenuItem selectAllItem = new JMenuItem(selectAllLabel);
+        selectAllItem.addActionListener(e -> selectAll());
+        editMenu.add(selectAllItem);
+
+        editMenu.addSeparator();
+
+        String aiLabel = System.getProperty("os.name").toLowerCase().contains("mac") 
+                ? "Ask AI    \u21E7\u2318A" : "Ask AI    Ctrl+Shift+A";
+        
+        JMenuItem askAIItem = new JMenuItem(aiLabel);
+        askAIItem.addActionListener(e -> {
+            TN3270Session session = getCurrentSession();
+            if (session != null) session.showAIChatDialog(this, session.getSelectedText());
+        });
+        editMenu.add(askAIItem);
+
+        menuBar.add(editMenu);
+
+        // ===== VIEW MENU =====
+        JMenu viewMenu = new JMenu("View");
+
+        JCheckBoxMenuItem showKeyboardItem = new JCheckBoxMenuItem("Show Keyboard Panel", true);
+        showKeyboardItem.addItemListener(e -> {
+            keyboardPanel.setVisible(showKeyboardItem.getState());
+            revalidate();
+            repaint();
+        });
+        viewMenu.add(showKeyboardItem);
+
+        viewMenu.addSeparator();
+
+        JMenuItem fontSizeItem = new JMenuItem("Font Size...");
+        fontSizeItem.addActionListener(e -> showFontSizeDialog());
+        viewMenu.add(fontSizeItem);
+
+        JMenuItem colorSchemeItem = new JMenuItem("Color Scheme...");
+        colorSchemeItem.addActionListener(e -> showColorSchemeDialog());
+        viewMenu.add(colorSchemeItem);
+
+        menuBar.add(viewMenu);
+
+        // ===== SETTINGS MENU =====
+        JMenu settingsMenu = new JMenu("Settings");
+
+        JMenuItem keyboardMapItem = new JMenuItem("Keyboard Mapping...");
+        keyboardMapItem.addActionListener(e -> showKeyboardMappingDialog());
+        settingsMenu.add(keyboardMapItem);
+
+        JMenuItem terminalSettingsItem = new JMenuItem("Terminal Settings...");
+        terminalSettingsItem.addActionListener(e -> showTerminalSettingsDialog());
+        settingsMenu.add(terminalSettingsItem);
+
+        menuBar.add(settingsMenu);
+
+        // ===== HELP MENU =====
+        JMenu helpMenu = new JMenu("Help");
+
+        JMenuItem aboutItem = new JMenuItem("About");
+        aboutItem.addActionListener(e -> showAboutDialog());
+        helpMenu.add(aboutItem);
+
+        JMenuItem keyboardHelpItem = new JMenuItem("Keyboard Reference");
+        keyboardHelpItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+        keyboardHelpItem.addActionListener(e -> showKeyboardReference());
+        helpMenu.add(keyboardHelpItem);
+
+        menuBar.add(helpMenu);
+
+        setJMenuBar(menuBar);
+    }
+
+// =======================================================================
+    // 6. DELEGATE METHODS
+    // =======================================================================
+
+    public void disconnect() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.disconnect();
+    }
+
+    public void reconnect() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.reconnect();
+    }
+
+    public void copySelection() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.copySelection();
+    }
+
+    public void pasteFromClipboard() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.pasteFromClipboard();
+    }
+
+    public void selectAll() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.selectAll();
+    }
+
+    // --- Dialog Delegates ---
+    public void showFileTransferDialog(boolean isDownload) {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.showFileTransferDialog(isDownload);
+    }
+
+    public void showFontSizeDialog() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.showFontSizeDialog();
+    }
+
+    public void showColorSchemeDialog() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.showColorSchemeDialog();
+    }
+
+    public void showKeyboardMappingDialog() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.showKeyboardMappingDialog();
+    }
+
+    public void showTerminalSettingsDialog() {
+        TN3270Session session = getCurrentSession();
+        if (session != null) session.showTerminalSettingsDialog();
+    }
+
+    // =======================================================================
+    // 7. GLOBAL DIALOGS (Connection, About)
+    // =======================================================================
+
+    public static void showConnectionDialog() {
+        Frame[] frames = Frame.getFrames();
+        TN3270Emulator activeWindow = null;
+        for (Frame f : frames) {
+            if (f instanceof TN3270Emulator && f.isVisible()) {
+                activeWindow = (TN3270Emulator) f;
+                break;
+            }
+        }
+
+        JDialog dialog = new JDialog(activeWindow, "Connect to Host", true);
+        dialog.setLayout(new BorderLayout(15, 15));
+
+        JPanel mainContainer = new JPanel(new BorderLayout(10, 10));
+        mainContainer.setBorder(new EmptyBorder(15, 15, 15, 15));
+
+        JPanel topPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5); gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
+        topPanel.add(new JLabel("Saved Profiles:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        JComboBox<String> profileChoice = new JComboBox<>();
+        profileChoice.addItem("(New Connection)");
+        for (String profileName : savedProfiles.keySet()) profileChoice.addItem(profileName);
+        topPanel.add(profileChoice, gbc);
+        mainContainer.add(topPanel, BorderLayout.NORTH);
+
+        JPanel centerPanel = new JPanel(new GridBagLayout());
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
+        centerPanel.add(new JLabel("Hostname:", SwingConstants.RIGHT), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        JTextField hostnameField = new JTextField("localhost", 20);
+        centerPanel.add(hostnameField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
+        centerPanel.add(new JLabel("Port:", SwingConstants.RIGHT), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        JTextField portField = new JTextField("23", 10);
+        centerPanel.add(portField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
+        centerPanel.add(new JLabel("LU Name:", SwingConstants.RIGHT), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        JTextField luNameField = new JTextField("", 10);
+        centerPanel.add(luNameField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
+        centerPanel.add(new JLabel("Model:", SwingConstants.RIGHT), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        JComboBox<String> modelChoice = new JComboBox<>();
+        modelChoice.addItem("3278-2 (24x80)"); modelChoice.addItem("3279-2 (24x80 Color)");
+        modelChoice.addItem("3278-3 (32x80)"); modelChoice.addItem("3279-3 (32x80 Color)");
+        modelChoice.addItem("3278-4 (43x80)"); modelChoice.addItem("3278-5 (27x132)");
+        modelChoice.setSelectedIndex(3);
+        centerPanel.add(modelChoice, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 4; gbc.weightx = 1.0;
+        JCheckBox tlsCheckbox = new JCheckBox("Use TLS/SSL encryption");
+        centerPanel.add(tlsCheckbox, gbc);
+        mainContainer.add(centerPanel, BorderLayout.CENTER);
+        dialog.add(mainContainer, BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton saveButton = new JButton("Save");
+        JButton deleteButton = new JButton("Delete");
+        JButton connectButton = new JButton("Connect");
+        JButton cancelButton = new JButton("Cancel");
+        deleteButton.setEnabled(false);
+
+        bottomPanel.add(saveButton); bottomPanel.add(deleteButton);
+        bottomPanel.add(Box.createHorizontalStrut(20));
+        bottomPanel.add(connectButton); bottomPanel.add(cancelButton);
+        dialog.add(bottomPanel, BorderLayout.SOUTH);
+        dialog.getRootPane().setDefaultButton(connectButton);
+
+        // Logic Handlers
+        profileChoice.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                String selected = (String) e.getItem();
+                if (selected.equals("(New Connection)")) {
+                    hostnameField.setText("localhost"); portField.setText("23");
+                    luNameField.setText(""); modelChoice.setSelectedIndex(3);
+                    tlsCheckbox.setSelected(false); deleteButton.setEnabled(false);
+                } else {
+                    ConnectionProfile profile = savedProfiles.get(selected);
+                    if (profile != null) {
+                        hostnameField.setText(profile.hostname);
+                        portField.setText(String.valueOf(profile.port));
+                        luNameField.setText(profile.luName != null ? profile.luName : "");
+                        tlsCheckbox.setSelected(profile.useTLS);
+                        for (int i = 0; i < modelChoice.getItemCount(); i++) {
+                            if (modelChoice.getItemAt(i).startsWith(profile.model)) { modelChoice.setSelectedIndex(i); break; }
+                        }
+                        deleteButton.setEnabled(true);
+                    }
+                }
+            }
+        });
+
+        saveButton.addActionListener(e -> {
+            String current = (String) profileChoice.getSelectedItem();
+            String defaultName = current.equals("(New Connection)") ? "" : current;
+            String name = JOptionPane.showInputDialog(dialog, "Profile Name:", defaultName);
+            if (name != null && !name.trim().isEmpty()) {
+                String host = hostnameField.getText().trim();
+                int port = 23; try { port = Integer.parseInt(portField.getText().trim()); } catch (Exception ex) {}
+                String modStr = (String) modelChoice.getSelectedItem();
+                String model = modStr.split(" ")[0];
+                String lu = luNameField.getText().trim();
+                boolean tls = tlsCheckbox.isSelected();
+                savedProfiles.put(name, new ConnectionProfile(name, host, port, model, lu, tls));
+                saveProfiles();
+                if (((DefaultComboBoxModel)profileChoice.getModel()).getIndexOf(name) == -1) profileChoice.addItem(name);
+                profileChoice.setSelectedItem(name);
+            }
+        });
+
+        deleteButton.addActionListener(e -> {
+            String selected = (String) profileChoice.getSelectedItem();
+            if (!selected.equals("(New Connection)")) {
+                if (JOptionPane.showConfirmDialog(dialog, "Delete profile '" + selected + "'?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+                    savedProfiles.remove(selected); saveProfiles();
+                    profileChoice.removeItem(selected); profileChoice.setSelectedIndex(0);
+                }
+            }
+        });
+
+        final TN3270Emulator targetWindow = activeWindow;
+        connectButton.addActionListener(e -> {
+            String host = hostnameField.getText().trim();
+            if (host.isEmpty()) host = "localhost";
+            int port = 23; try { port = Integer.parseInt(portField.getText().trim()); } catch (Exception ex) {}
+            String modStr = (String) modelChoice.getSelectedItem();
+            String model = modStr.split(" ")[0];
+            String lu = luNameField.getText().trim();
+            boolean tls = tlsCheckbox.isSelected();
+
+            dialog.dispose();
+
+            if (targetWindow != null) {
+                targetWindow.openNewSession(host, port, model, lu, tls);
+            } else {
+                TN3270Emulator emu = new TN3270Emulator(model);
+                emu.openNewSession(host, port, model, lu, tls);
+            }
+        });
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+        dialog.pack(); dialog.setLocationRelativeTo(activeWindow); dialog.setVisible(true);
+    }
+
+    private void showAboutDialog() {
+        JOptionPane.showMessageDialog(this, "TN3270 Emulator\nVersion 2.1 (Modular)\n\n" +
+                "Features:\n- MVC Architecture\n- Tabbed Sessions\n- AI Assistant\n- IND$FILE", "About", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showKeyboardReference() {
+        JDialog dialog = new JDialog(this, "Keyboard Reference", false);
+        dialog.setLayout(new BorderLayout());
+        JTextArea textArea = new JTextArea(15, 50);
+        textArea.setEditable(false);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setMargin(new Insets(10, 10, 10, 10));
+        textArea.setText("F1-F12       PF1-PF12\nShift+F1-12  PF13-PF24\nEnter        Send AID (Enter)\nCtrl+C       Copy\nCtrl+V       Paste\nCtrl+A       Select All\nCtrl+Shift+A Ask AI");
+        dialog.add(new JScrollPane(textArea), BorderLayout.CENTER);
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton b = new JButton("Close");
+        b.addActionListener(e -> dialog.dispose());
+        p.add(b);
+        dialog.add(p, BorderLayout.SOUTH);
+        dialog.pack(); dialog.setLocationRelativeTo(this); dialog.setVisible(true);
+    }
+}
+
+

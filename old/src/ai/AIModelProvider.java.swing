@@ -1,0 +1,9 @@
+package ai;
+
+
+public interface AIModelProvider {
+/**
+* Ask the model (synchronous). Returns the textual answer.
+*/
+String ask(String model, String prompt) throws Exception;
+}

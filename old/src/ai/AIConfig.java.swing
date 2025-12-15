@@ -1,0 +1,54 @@
+package ai;
+
+
+import java.io.FileInputStream;
+import java.util.Properties;
+import java.util.Arrays;
+import java.util.List;
+import java.io.File;
+
+
+public class AIConfig {
+public boolean enabled;
+public String provider; // "openai", "anthropic", "ollama", "custom-http"
+public String apiKey;
+public String endpoint; // for local or custom models
+public List<String> models;
+
+
+public static AIConfig load() {
+AIConfig cfg = new AIConfig();
+Properties p = new Properties();
+File f = new File("ai.conf");
+if (!f.exists()) {
+cfg.enabled = false;
+cfg.provider = "openai";
+cfg.apiKey = "";
+cfg.endpoint = "";
+cfg.models = Arrays.asList("gpt-4o-mini");
+return cfg;
+}
+
+
+try (FileInputStream in = new FileInputStream(f)) {
+p.load(in);
+} catch (Exception e) {
+System.err.println("AI: Failed to load ai.conf: " + e.getMessage());
+cfg.enabled = false;
+return cfg;
+}
+
+
+cfg.enabled = Boolean.parseBoolean(p.getProperty("ai.enabled", "false"));
+cfg.provider = p.getProperty("ai.provider", "openai");
+cfg.apiKey = p.getProperty("ai.apiKey", "");
+cfg.endpoint = p.getProperty("ai.endpoint", "");
+
+
+String models = p.getProperty("ai.models", "gpt-4o-mini");
+cfg.models = Arrays.asList(models.split("\\s*,\\s*"));
+
+
+return cfg;
+}
+}

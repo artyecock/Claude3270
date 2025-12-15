@@ -1,0 +1,59 @@
+package com.tn3270.ai;
+
+import java.awt.Frame;
+
+public class AIManager {
+    private static AIManager instance;
+    private AIConfig config;
+    private AIModelProvider provider;
+    private AIChatWindow activeWindow;
+
+    private AIManager() {
+        config = new AIConfig("ai.conf");
+    }
+
+    public static synchronized AIManager getInstance() {
+        if (instance == null)
+            instance = new AIManager();
+        return instance;
+    }
+
+    public void reloadConfig() {
+        config.load();
+        provider = null;
+    }
+    
+    public AIModelProvider resolveProvider() {
+        if (provider != null)
+            return provider;
+        
+        String prov = config.getProvider();
+        
+        if ("ollama".equalsIgnoreCase(prov)) {
+            String endpoint = config.get("ai.endpoint", "http://localhost:11434");
+            provider = new OllamaProvider(endpoint, config.getModels());
+        } else if ("google".equalsIgnoreCase(prov)) {
+            String googleEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+            provider = new OpenAIProvider(config.getApiKey(), config.getModels(), googleEndpoint);
+        } else {
+            provider = new OpenAIProvider(config.getApiKey(), config.getModels());
+        }
+        return provider;
+    }
+
+    public void showChatDialog(Frame owner, String selectedText, boolean autoSend) {
+        if (activeWindow != null && activeWindow.isVisible()) {
+            activeWindow.toFront();
+            activeWindow.showWithPrefill(selectedText, config.get("ai.prompt.default", ""), autoSend);
+            return;
+        }
+        AIModelProvider prov = resolveProvider();
+        AIChatWindow w = new AIChatWindow(owner, prov, config);
+        this.activeWindow = w;
+        w.showWithPrefill(selectedText, config.get("ai.prompt.default", ""), autoSend);
+    }
+    
+    public void showChatDialog(Frame owner, String text) {
+        showChatDialog(owner, text, false);
+    }
+}

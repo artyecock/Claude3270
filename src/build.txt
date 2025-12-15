@@ -1,0 +1,41 @@
+For Powershell, use:
+
+jpackage --name "TN3270Emulator" ^
+  --input . ^
+  --main-jar TN3270.jar ^
+  --main-class com.tn3270.TN3270Emulator ^
+  --type app-image ^
+  --icon Claude3270.ico ^
+  --win-menu ^
+  --win-shortcut
+
+
+For MacOS (requires an Apple Developer's license), use:
+
+jpackage --name "TN3270Emulator" \
+  --input . \
+  --main-jar TN3270.jar \
+  --main-class com.tn3270.TN3270Emulator \
+  --type dmg \
+  --icon myicon.icns
+
+For MacOS, and bypass signature: 
+
+jpackage --name "TN3270Emulator" \
+  --input . \
+  --main-jar TN3270.jar \
+  --main-class com.tn3270.TN3270Emulator \
+  --type dmg \
+  --icon Claude3270.icns \
+  --vendor "OpenSource"
+
+(Requires: "xattr -cr /Applications/TN3270Emulator.app" after installing the app)
+
+For Linux, use:
+
+jpackage --name "tn3270-emulator" \
+  --input . \
+  --main-jar TN3270.jar \
+  --main-class com.tn3270.TN3270Emulator \
+  --type deb \
+  --icon Claude3270.png
