@@ -1,7 +1,7 @@
 # Claude3270
 Collaboration effort with AI to produce an Open Source TN3270 emulator in Java
 
-[Please read the src/Claude3270_QuickStart.md file for Quick Start information]]
+[Please read the src/Claude3270_QuickStart.md file for Quick Start information]
 
 When my absolute favorite TN3270 emulator stopped working for a few of my target
 hosts, I started looking for a suitable replacement.  As I use MacOS, the replacement 
