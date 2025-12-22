@@ -3,13 +3,18 @@ package com.tn3270.ai;
 import javax.swing.*;
 import javax.swing.text.DefaultCaret;
 import java.awt.*;
+import java.util.function.Consumer;
 
 public class AIChatScrollView extends JPanel {
     public final JPanel listPanel;
     private final JScrollPane scrollPane;
+    private final Consumer<String> onSaveToHost;
 
-    public AIChatScrollView(Font uiFont, Color fg, Color bg) {
+    //public AIChatScrollView(Font uiFont, Color fg, Color bg) {
+    public AIChatScrollView(Font font, Color textCol, Color bgCol, Consumer<String> onSaveToHost) {
         super(new BorderLayout());
+        
+        this.onSaveToHost = onSaveToHost;
 
         listPanel = new JPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
@@ -27,7 +32,8 @@ public class AIChatScrollView extends JPanel {
     }
 
     public AIMessageBubble addMessage(String who, String text, Font uiFont, Color fg, Color bg) {
-        AIMessageBubble bubble = new AIMessageBubble(who, text, uiFont, fg, bg);
+        //AIMessageBubble bubble = new AIMessageBubble(who, text, uiFont, fg, bg);
+        AIMessageBubble bubble = new AIMessageBubble(who, text, uiFont, fg, bg, onSaveToHost);
 
         bubble.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 

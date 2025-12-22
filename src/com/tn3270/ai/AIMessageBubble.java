@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.function.Consumer;
 
 public class AIMessageBubble extends JPanel {
     public final String who;
@@ -12,7 +13,7 @@ public class AIMessageBubble extends JPanel {
     private final Color bubbleColor;
     private final Color borderColor;
 
-    public AIMessageBubble(String who, String text, Font font, Color fg, Color bg) {
+    public AIMessageBubble(String who, String text, Font font, Color fg, Color bg, Consumer<String> onSaveAction) {
         this.who = who;
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
@@ -80,6 +81,7 @@ public class AIMessageBubble extends JPanel {
         bubblePanel.setBorder(new EmptyBorder(4, 4, 4, 4));
         bubblePanel.add(scrollPane, BorderLayout.CENTER);
 
+        // --- Context Menu ---
         JPopupMenu popup = new JPopupMenu();
         JMenuItem copyItem = new JMenuItem("Copy Message");
         copyItem.addActionListener(e -> {
@@ -124,12 +126,53 @@ public class AIMessageBubble extends JPanel {
         };
         textArea.addMouseWheelListener(forwarder);
         scrollPane.addMouseWheelListener(forwarder);
+        
+        // --- ACTION BAR (For AI Responses) ---
+        if ("assistant".equalsIgnoreCase(who)) {
+            JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+            actionsPanel.setOpaque(false);
+            
+            // 1. Copy Button
+            JButton copyBtn = new JButton("Copy");
+            copyBtn.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            copyBtn.setMargin(new Insets(1, 4, 1, 4));
+            copyBtn.addActionListener(e -> {
+                try {
+                    String currentContent = textArea.getText();
+                    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                        new java.awt.datatransfer.StringSelection(currentContent), null);
+                } catch(Exception ex) {}
+            });
+            actionsPanel.add(copyBtn);
+
+            // 2. Save to Host Button
+            if (onSaveAction != null) {
+                JButton saveHostBtn = new JButton("Save to Host");
+                saveHostBtn.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                saveHostBtn.setMargin(new Insets(1, 4, 1, 4));
+                
+                saveHostBtn.addActionListener(e -> {
+                    // --- FIX: Get text from textArea, NOT the constructor argument ---
+                    String currentContent = textArea.getText(); 
+                    onSaveAction.accept(currentContent); 
+                });
+                actionsPanel.add(saveHostBtn);
+            }
+            
+            add(actionsPanel, BorderLayout.SOUTH);
+        }
     }
 
     public void appendText(String s) {
         textArea.append(s);
+        // Keep caret at end to auto-scroll during streaming
         textArea.setCaretPosition(textArea.getDocument().getLength());
         revalidate();
         repaint();
+    }
+    
+    // Optional: Public getter if needed by other components
+    public String getText() {
+        return textArea.getText();
     }
 }

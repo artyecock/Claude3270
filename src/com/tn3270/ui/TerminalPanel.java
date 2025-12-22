@@ -24,6 +24,9 @@ public class TerminalPanel extends JPanel implements Scrollable {
 
     public enum CursorStyle { BLOCK, UNDERSCORE, I_BEAM }
     private CursorStyle cursorStyle = CursorStyle.BLOCK;
+    
+    // NEW: Explicit Blink State
+    private boolean blinkState = true; 
 
     public TerminalPanel(ScreenModel model) {
         this.screenModel = model;
@@ -160,6 +163,12 @@ public class TerminalPanel extends JPanel implements Scrollable {
     public boolean isShowCrosshair() { 
     	return showCrosshair; 
     }
+    
+    // NEW: Method called by the Timer
+    public void toggleBlink() {
+        this.blinkState = !this.blinkState;
+        repaint();
+    }
 
     /**
      * Paints the terminal characters.
@@ -225,7 +234,8 @@ public class TerminalPanel extends JPanel implements Scrollable {
         byte[] highlight = screenModel.getHighlight();
         Color[] palette = screenModel.getPalette();
         
-        boolean blinkVisible = (System.currentTimeMillis() / 500) % 2 == 0;
+        //boolean blinkVisible = (System.currentTimeMillis() / 500) % 2 == 0;
+        boolean blinkVisible = this.blinkState;
 
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
@@ -233,7 +243,10 @@ public class TerminalPanel extends JPanel implements Scrollable {
                 if (pos >= buffer.length) break;
 
                 char c = buffer[pos];
-                if (screenModel.isFieldStart(pos)) c = ' ';
+                //if (screenModel.isFieldStart(pos)) c = ' ';
+                boolean isAttrByte = screenModel.isFieldStart(pos); // Helper bool
+                
+                if (isAttrByte) c = ' ';
                 if (c == '\0') c = ' ';
 
                 Color fg = getForeground();
@@ -262,11 +275,25 @@ public class TerminalPanel extends JPanel implements Scrollable {
                             else              fg = palette[4];
                         }
                     }
-                    byte hl = highlight[pos];
+                    //byte hl = highlight[pos];
+                    // FIX 1: HANDLE SIGNED BYTES
+                    // Java bytes are signed (-128 to 127). 0xF1 becomes -15.
+                    // We must mask with 0xFF to compare correctly with integer literals like 0xF1.
+                    int hl = highlight[pos] & 0xFF; 
                     if (hl == 0 && fieldStart >= 0) hl = highlight[fieldStart];
+                    //if (hl == 0xF1 && !blinkVisible) c = ' ';
+                    // FIX: Use the class field blinkVisible
                     if (hl == 0xF1 && !blinkVisible) c = ' ';
                     if (hl == 0xF2) reverse = true;
                     if (hl == 0xF4) underscore = true;
+                    
+                    // If this is the attribute byte itself, do not apply visuals to it
+                    if (isAttrByte) {
+                        underscore = false;
+                        reverse = false; 
+                        // Note: We don't disable blink here because 'c' is already ' ', 
+                        // blinking a space is invisible anyway.
+                    }
                 }
 
                 if (isPosSelected(pos)) {
@@ -289,7 +316,24 @@ public class TerminalPanel extends JPanel implements Scrollable {
                 g2d.drawString(String.valueOf(c), x, y + charAscent);
 
                 if (underscore && !isHidden) {
-                    g2d.drawLine(x, y + charAscent + 2, x + charWidth, y + charAscent + 2);
+                    //g2d.drawLine(x, y + charAscent + 2, x + charWidth, y + charAscent + 2);
+                	
+                    // FIX: Draw line at the absolute bottom of the cell (height - 1).
+                    // Previous logic (charAscent + 2) pushed the line into the next row,
+                    // causing it to be overwritten by the next row's background fill.
+                    //int lineY = y + charHeight - 1;
+                    //g2d.drawLine(x, lineY, x + charWidth, lineY);
+                    // FIX 3: USE FILLRECT FOR UNDERSCORE
+                    // drawLine can be inconsistent with sub-pixel scaling.
+                    // fillRect guarantees a 1px (or scaled equivalent) line.
+                    // Anchored at the very bottom of the cell.
+                	
+                	// At some point, we may decide NOT to underscore NULL characters
+                	// which means saving the raw character so that we can test it here:
+                    // FIX: Don't underline Nulls, even if they render as spaces.
+                    // Only underline if it's a real character or a real space (0x40).
+                    // if (rawChar != '\0' && !screenModel.isFieldStart(pos)) {
+                    g2d.fillRect(x, y + charHeight - 1, charWidth, 1);
                 }
             }
         }

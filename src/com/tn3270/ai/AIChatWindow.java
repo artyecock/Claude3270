@@ -1,6 +1,9 @@
 package com.tn3270.ai;
 
 import com.tn3270.ui.RoundedBorder;
+import com.tn3270.TN3270Emulator;
+import com.tn3270.TN3270Session;
+import com.tn3270.ai.AIManager; // For helpers
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -23,6 +26,8 @@ public class AIChatWindow extends JDialog {
     private final Color BG_MAIN = new Color(245, 247, 250);
     private final Color BG_INPUT = Color.WHITE;
     private final Color TEXT_COLOR = new Color(30, 30, 30);
+    
+    private final com.tn3270.TN3270Emulator emulator;
 
     public AIChatWindow(Frame owner, AIModelProvider prov, AIConfig cfg) {
         super((Frame) null, "AI Assistant", false); 
@@ -31,6 +36,9 @@ public class AIChatWindow extends JDialog {
         this.config = cfg;
         this.streamingClient = new AIStreamingClient(prov);
         this.historyStore = new AIHistoryStore(cfg.get("ai.autosave.dir", "ai_history"));
+        
+        // Cast owner to emulator
+        this.emulator = (owner instanceof com.tn3270.TN3270Emulator) ? (com.tn3270.TN3270Emulator) owner : null;
 
         setLayout(new BorderLayout());
         setSize(950, 750);
@@ -51,6 +59,11 @@ public class AIChatWindow extends JDialog {
 
         sendBtn    = createColorButton("Send",    new Color(0, 120, 215), Color.WHITE);
         tryNextBtn = createColorButton("Retry",   new Color(255, 140, 0), Color.WHITE);
+        
+        // --- NEW BUTTONS ---
+        JButton attachBtn = createColorButton("Attach Host", new Color(102, 51, 153), Color.WHITE); // Purple
+        JButton saveHostBtn = createColorButton("Save Host", new Color(70, 130, 180), Color.WHITE); // Steel Blue
+        
         saveBtn    = createColorButton("Save",    new Color(40, 167, 69), Color.WHITE);
         loadBtn    = createColorButton("Load",    new Color(108, 117, 125), Color.WHITE);
         prefsBtn   = createColorButton("Config",  new Color(23, 162, 184), Color.WHITE);
@@ -65,6 +78,9 @@ public class AIChatWindow extends JDialog {
         top.add(sendBtn);
         top.add(tryNextBtn);
         top.add(Box.createHorizontalStrut(15));
+        top.add(attachBtn);
+        top.add(saveHostBtn);
+        top.add(Box.createHorizontalStrut(15));
         top.add(saveBtn);
         top.add(loadBtn);
         top.add(Box.createHorizontalStrut(15));
@@ -75,7 +91,9 @@ public class AIChatWindow extends JDialog {
         add(top, BorderLayout.NORTH);
 
         Font chatFont = new Font("Monospaced", Font.PLAIN, 13);
-        chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE);
+        //chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE);
+        // Pass 'this::saveTextToHost' as the "OnSave" callback
+        chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE, this::saveTextToHost);
         
         JPanel chatWrapper = new JPanel(new BorderLayout());
         chatWrapper.setBackground(Color.WHITE);
@@ -121,6 +139,10 @@ public class AIChatWindow extends JDialog {
 
         sendBtn.addActionListener(e -> doSend());
         tryNextBtn.addActionListener(e -> doTryNext());
+        
+        attachBtn.addActionListener(e -> doAttachHostFile());
+        saveHostBtn.addActionListener(e -> doSaveToHost());
+        
         prefsBtn.addActionListener(e -> new AIPreferencesPanel(owner, config).showDialog());
 
         inputArea.addKeyListener(new KeyAdapter() {
@@ -249,5 +271,175 @@ public class AIChatWindow extends JDialog {
         modelChoice.select(next);
         inputArea.setText(lastPrompt);
         doSend();
+    }
+    
+ // =======================================================================
+    // LOGIC: DOWNLOAD FROM MAINFRAME -> AI PROMPT
+    // =======================================================================
+    private void doAttachHostFile() {
+        if (emulator == null) return;
+        com.tn3270.TN3270Session session = emulator.getCurrentSession();
+        
+        if (session == null || !session.isConnected()) {
+            JOptionPane.showMessageDialog(this, "No active session connected.");
+            return;
+        }
+
+        //String dataset = JOptionPane.showInputDialog(this, "Enter Host Dataset (e.g. USER.SOURCE(MAIN)):");
+        String dataset = JOptionPane.showInputDialog(this, "Enter Host Dataset (e.g. USER.SOURCE(MAIN) or PROFILE EXEC A):");
+        if (dataset == null || dataset.trim().isEmpty()) return;
+
+        // Use the AIManager singleton for helpers
+        AIManager aiMgr = AIManager.getInstance();
+
+        com.tn3270.TN3270Session.MemoryTransferCallback callback = new com.tn3270.TN3270Session.MemoryTransferCallback() {
+            @Override
+            public void onDownloadComplete(String content) {
+                // 1. Check for Binary Garbage
+                if (AIManager.isLikelyBinary(content.getBytes())) {
+                    int confirm = JOptionPane.showConfirmDialog(AIChatWindow.this, 
+                        "The file '" + dataset + "' appears to be binary.\nAttach anyway?", 
+                        "Binary Warning", JOptionPane.YES_NO_OPTION);
+                    if (confirm != JOptionPane.YES_OPTION) return;
+                }
+
+                // 2. Augment Prompt with Context (RAG)
+                // Note: We default to TSO for now, or you can try to detect from session
+                String augmented = aiMgr.buildAugmentedPrompt(dataset, content, "TSO");
+
+                SwingUtilities.invokeLater(() -> {
+                    // Append to input area so the user can see/edit it before sending
+                    inputArea.append("\n" + augmented);
+                    // Also scroll to bottom
+                    inputArea.setCaretPosition(inputArea.getDocument().getLength());
+                    JOptionPane.showMessageDialog(AIChatWindow.this, "File attached successfully.");
+                });
+            }
+
+            @Override
+            public void onUploadComplete() { }
+
+            @Override
+            public void onError(String message) {
+                JOptionPane.showMessageDialog(AIChatWindow.this, "Download Error: " + message);
+            }
+        };
+
+        // Trigger Session Logic (TSO Default)
+        //session.downloadTextFromHost(dataset, com.tn3270.TN3270Session.HostType.TSO, callback); 
+        session.downloadTextFromHost(dataset, session.getHostType(), callback);
+    }
+
+    // =======================================================================
+    // LOGIC: UPLOAD AI RESPONSE -> MAINFRAME
+    // =======================================================================
+    private void doSaveToHost() {
+        // 1. Try Input Area Selection
+        String text = inputArea.getSelectedText();
+        
+        // 2. Fallback to Clipboard
+        if (text == null) {
+            try {
+                text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+            } catch(Exception e) {}
+        }
+
+        if (text == null || text.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "To save manually, select text in the Input Area or copy text to the Clipboard.");
+            return;
+        }
+        
+        saveTextToHost(text);
+    }
+    
+    private void doSaveToHostOld() {
+        if (emulator == null) return;
+        com.tn3270.TN3270Session session = emulator.getCurrentSession();
+        if (session == null || !session.isConnected()) {
+            JOptionPane.showMessageDialog(this, "No active session connected.");
+            return;
+        }
+
+        // Try to get selected text from Chat View (Bubbles) OR Input Area
+        String text = null;
+        
+        // 1. Check Input Area Selection
+        text = inputArea.getSelectedText();
+        
+        // 2. If nothing, we might want to let the user select a specific bubble context?
+        // Since your chatView uses a custom ScrollView with Bubbles, standard text selection 
+        // might be tricky unless your AIMessageBubble supports copying.
+        // Fallback: If input is empty, maybe use the last AI response?
+        if (text == null && lastPrompt != null) {
+             // For now, let's just rely on Input Area or Clipboard.
+             // Or prompt the user: "Copy the text you want to save to the clipboard first?"
+        }
+        
+        // Check Clipboard as fallback if nothing selected
+        if (text == null) {
+            try {
+                text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+            } catch(Exception e) {}
+        }
+
+        if (text == null || text.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please select text in the input area or copy text to clipboard first.");
+            return;
+        }
+
+        final String textToUpload = text; // Final for lambda
+
+        String dataset = JOptionPane.showInputDialog(this, "Save clipboard/selection to Dataset:");
+        if (dataset == null) return;
+
+        session.uploadTextToHost(textToUpload, dataset, session.getHostType(), new com.tn3270.TN3270Session.MemoryTransferCallback() {
+            @Override
+            public void onUploadComplete() {
+                JOptionPane.showMessageDialog(AIChatWindow.this, "Saved to " + dataset);
+            }
+            @Override
+            public void onDownloadComplete(String c) {}
+            @Override
+            public void onError(String msg) {
+                JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);
+            }
+        });
+    }
+    
+    /**
+     * Public method to upload specific text to the host.
+     * Can be called by Toolbar Buttons OR Chat Bubbles.
+     */
+    public void saveTextToHost(String textContent) {
+        if (emulator == null) return;
+        com.tn3270.TN3270Session session = emulator.getCurrentSession();
+        
+        if (session == null || !session.isConnected()) {
+            JOptionPane.showMessageDialog(this, "No active session connected.");
+            return;
+        }
+
+        if (textContent == null || textContent.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No text provided to save.");
+            return;
+        }
+
+        // Auto-detect host type based on dataset name, so we just ask for the name.
+        String dataset = JOptionPane.showInputDialog(this, "Save content to Host Dataset:");
+        if (dataset == null || dataset.trim().isEmpty()) return;
+
+        // Perform the upload
+        session.uploadTextToHost(textContent, dataset, null, new com.tn3270.TN3270Session.MemoryTransferCallback() {
+            @Override
+            public void onUploadComplete() {
+                JOptionPane.showMessageDialog(AIChatWindow.this, "Successfully saved to " + dataset);
+            }
+            @Override
+            public void onDownloadComplete(String c) {}
+            @Override
+            public void onError(String msg) {
+                JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);
+            }
+        });
     }
 }

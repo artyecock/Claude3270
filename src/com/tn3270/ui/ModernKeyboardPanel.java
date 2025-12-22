@@ -44,7 +44,7 @@ public class ModernKeyboardPanel extends JPanel {
         JPanel row1 = new JPanel(new GridLayout(1, 12, 1, 1));
         row1.setOpaque(false);
         for (int i = 1; i <= 12; i++) {
-            final byte aid = (i <= 9) ? (byte)(AID_PF1 + i - 1) :
+            final int aid = (i <= 9) ? (AID_PF1 + i - 1) :
                              (i == 10)? AID_PF10 : 
                              (i == 11)? AID_PF11 : AID_PF12;
             row1.add(createButton("F" + i, COL_FKEY, e -> sendAID(aid)));
@@ -206,7 +206,7 @@ public class ModernKeyboardPanel extends JPanel {
         return panel;
     }
 
-    private void sendAID(byte aid) {
+    private void sendAID(int aid) {
         TN3270Session s = emulator.getCurrentSession();
         if (s != null && !s.keyboardLocked && s.isConnected()) {
             s.sendAID(aid);
