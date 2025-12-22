@@ -13,6 +13,11 @@ public class AIManager implements AIModelProvider {
     private static AIManager instance;
     private AIConfig config;
     private AIChatWindow activeWindow;
+    
+    // --- FIX: Use Home Directory and specific dot-file name ---
+    private static final String CONFIG_FILE = System.getProperty("user.home") 
+                                            + java.io.File.separator 
+                                            + ".tn3270ai"; 
 
     // --- The Tuple Class ---
     private static class ModelRoute {
@@ -62,7 +67,8 @@ public class AIManager implements AIModelProvider {
     private final List<String> availableModels = new ArrayList<>();
 
     private AIManager() {
-        config = new AIConfig("ai.conf");
+        // Load from ~/.tn3270ai instead of local "ai.conf"
+        config = new AIConfig(CONFIG_FILE);
         reloadConfig();
     }
 

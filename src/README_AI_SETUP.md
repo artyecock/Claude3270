@@ -5,7 +5,7 @@
 This guide covers how to enable the AI features in the TN3270 Emulator. You can choose to use public cloud providers (like OpenAI) or build your own private, local AI server using affordable hardware.
 
 ## Table of Contents
-1.  [The `ai.conf` Configuration File](#1-the-aiconf-configuration-file)
+1.  [The `.tn3270ai` Configuration File](#1-the-.tn3270aiconf-configuration-file)
 2.  [Using Public Cloud LLMs](#2-using-public-cloud-llms)
 3.  [Building a Private Local AI Server](#3-building-a-private-local-ai-server)
     *   [Hardware Recommendations](#hardware-recommendations)
@@ -15,9 +15,9 @@ This guide covers how to enable the AI features in the TN3270 Emulator. You can 
 
 ---
 
-## 1. The `ai.conf` Configuration File
+## 1. The `.tn3270ai` Configuration File
 
-To enable AI features, you must create a file named `ai.conf` in the same directory as the `TN3270.jar` file (or in your user home directory).
+To enable AI features, you must create a file named `.tn3270ai` in your home directory.
 
 ### File Format
 The file uses a standard `key=value` format. Lines starting with `#` are comments.
@@ -145,7 +145,7 @@ podman run -d \
 
 Now, connect your TN3270 Emulator to your private server.
 
-1.  Edit your `ai.conf` file.
+1.  Edit your `.tn3270ai` file.
 2.  Set the provider to `local` (or `openai` compatible).
 3.  Point the Base URL to your AnythingLLM container.
 
@@ -253,7 +253,7 @@ sudo dphys-swapfile setup
 sudo dphys-swapfile swapon
 ```
 
-### Summary Sizing Table for `ai.conf` users:
+### Summary Sizing Table for `.tn3270ai` users:
 
 | Hardware | Target Model | Podman Mem Cap | Recommended Quant |
 | :--- | :--- | :--- | :--- |

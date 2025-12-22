@@ -46,10 +46,10 @@ The emulator includes a built-in AI chat interface capable of connecting to Loca
 3.  The AI Chat Window opens with your selection pre-filled as context.
 4.  Ask questions like *"Explain this error"* or *"What does this JCL do?"*.
 
-### Configuration (`ai.conf`)
-The application looks for an `ai.conf` file in the execution directory. It supports seamless switching between providers via the "Retry" button in the chat UI.
+### Configuration (`.tn3270ai`)
+The application looks for an `.tn3270ai` file in your home directory. It supports seamless switching between providers via the "Retry" button in the chat UI.
 
-**Example `ai.conf`:**
+**Example `.tn3270ai`:**
 ```properties
 # List your providers
 ai.providers=local,cloud
@@ -123,7 +123,7 @@ Built-in GUI for uploading and downloading datasets without leaving the emulator
 The emulator stores settings in your User Home directory:
 1.  **`.tn3270profiles`**: Saved connection hosts and ports.
 2.  **`.tn3270keymap`**: Custom keyboard mappings and character translations.
-3.  **`ai.conf`**: (Located in app directory) AI Provider configuration.
+3.  **`.tn3270ai`**: (Located in app directory) AI Provider configuration.
 
 ### Connectivity
 *   **TLS/SSL:** Full support for secure TN3270 connections.

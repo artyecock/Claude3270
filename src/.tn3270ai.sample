@@ -1,0 +1,183 @@
+# ==============================================================================
+# TN3270 AI CONFIGURATION - QUICK START
+# ==============================================================================
+# This file controls the AI Assistant features, including the "Context Awareness"
+# that detects mainframe file types (JCL, REXX, etc.) and injects expert knowledge.
+#
+# INSTRUCTIONS:
+# 1. Obtain an API Key from your provider (OpenAI, Google, etc.) See PROVIDER SETUP below.
+#    (You NEED an API key if you want to use the AI features).
+# 2. Paste the key below.
+# 3. Restart the Emulator.
+# 4. Feel free to come back here and add additional LLMs and context hints as desired.
+# ==============================================================================
+
+# --- GLOBAL SETTINGS ---
+# Where to save chat history (json files)
+#   ai.autosave.dir=ai_history
+#      Saves to directory "ai_history" anchored off your home directory
+#      Creates C:\Users\Name\ai_history\ (or /Users/Name/ai_history).
+#
+#   ai.autosave.dir=C:/Temp/MyLogs
+#      Uses the specified full path.
+#
+#   ai.autosave.dir=.tn3270history
+#      Hidden Folder: You can hide it neatly alongside your other dot-files in the home directory.
+#
+ai.autosave.dir=ai_history
+
+# Default System Prompt (used if no specific context is detected, and is just a context hint to the AI)
+#
+ai.prompt.default=You are a helpful Mainframe Systems Programmer assistant. You are an expert in z/OS, z/VM, JCL, REXX, and Assembler.
+
+# ==============================================================================
+# PROVIDER SETUP (Default: OpenAI)
+# ==============================================================================
+# To get an OpenAI Key: https://platform.openai.com/api-keys
+# Don't be afraid, just go to the URL above, carefully generate an API key and paste it after "ai.apiKey=" below.
+
+# MODE 1: SINGLE PROVIDER (Simple)
+# If 'ai.providers' is NOT defined, these global settings are used.
+
+# The active provider to use by default:
+#
+ai.provider=openai
+
+# Your API Key (Paste below)
+#
+ai.apiKey=PASTE_YOUR_OPENAI_KEY_HERE_(it_begins_with_"sk")
+
+# Available models for this provider (comma separated)
+#
+ai.models=gpt-4o, gpt-4o-mini
+
+# MODE 2: MULTIPLE PROVIDERS (Advanced)
+# If defined, this overrides Mode 1. List identifiers here (comma-separated).
+# The system will look for settings prefixed with those identifiers.
+# Identifiers are prefixes of your own choosing.  See bottom of file for more details.
+#
+# Example:
+#
+# ai.providers=main, local
+#
+# main.type=openai
+# main.apiKey=sk-...
+# main.models=gpt-4o
+#
+# local.type=ollama
+# local.endpoint=http://localhost:11434
+# local.models=llama3
+
+# ==============================================================================
+# INTELLIGENT CONTEXT (RAG) CONFIGURATION
+# ==============================================================================
+# These rules allow the emulator to detect what kind of file you are attaching
+# (via "Attach Host File" or "Save to Host") and inject specific manuals/syntax
+# guides into the AI prompt automatically.
+
+# 1. DETECTION ORDER
+# Priority list of rules to check. First match wins.
+#
+detect.order=cms_rexx, tso_rexx, pipelines, jcl, asm, cobol
+
+# 2. DETECTION RULES
+# Syntax: 
+#   host     = TSO or CMS (Optional constraint)
+#   triggers = Pipe-separated list (|). (Think of this as an "or" operation). 
+#              Prefix with FILE: to match filename, TEXT: to match content.
+
+# -- Rule: CMS REXX --
+#
+detect.cms_rexx.host=CMS
+detect.cms_rexx.triggers=FILE: EXEC | FILE: XEDIT | TEXT:/* REXX */ | TEXT:Address CMS | TEXT:Address Command
+
+# -- Rule: TSO REXX --
+#
+detect.tso_rexx.host=TSO
+detect.tso_rexx.triggers=TEXT:/* REXX */ | FILE:.EXEC | TEXT:Address TSO
+
+# -- Rule: CMS Pipelines --
+#
+detect.pipelines.host=CMS
+detect.pipelines.triggers=TEXT:PIPE | FILE: PIPE
+
+# -- Rule: JCL (z/OS) --
+#
+detect.jcl.host=TSO
+detect.jcl.triggers=TEXT:// JOB | FILE:.JCL | FILE:.CNTL
+
+# -- Rule: Assembler --
+#
+detect.asm.triggers=FILE: ASSEMBLE | FILE:.ASM | TEXT:CSECT
+
+# 3. CONTEXT DEFINITIONS (The "Expert Knowledge")
+# These prompts are injected when a rule above matches.
+
+# Context: CMS REXX
+#
+context.cms_rexx.prompt=You are an expert in z/VM CMS REXX. Use 'Address CMS' for host commands. Watch out for the Program Stack (LIFO/FIFO).
+context.cms_rexx.ref=z/VM 7.3 REXX/VM Reference (SC24-6255)
+context.cms_rexx.url=https://www.ibm.com/docs/en/SSB27U_7.3.0/pdf/hcld000_v7r3.pdf
+
+# Context: TSO REXX
+#
+context.tso_rexx.prompt=You are an expert in z/OS TSO/E REXX. Handle TSO specific functions like PROMPT/NOPROMPT and ISPF services.
+context.tso_rexx.ref=z/OS 2.5 TSO/E REXX Reference (SA32-0972)
+context.tso_rexx.url=https://www.ibm.com/docs/en/SSLTBW_2.5.0/pdf/ikj3a300.pdf
+
+# Context: CMS Pipelines
+#
+context.pipelines.prompt=You are an expert in z/VM CMS Pipelines. Help construct efficient pipe stages. Use the '|' separator.
+context.pipelines.ref=z/VM 7.3 CMS Pipelines User's Guide (SC24-6252)
+context.pipelines.url=https://www.ibm.com/docs/en/SSB27U_7.3.0/pdf/hcld500_v7r3.pdf
+
+# Context: JCL
+#
+context.jcl.prompt=You are a z/OS JCL expert. Validate JOB cards, DD statements, and DISP parameters. Ensure DSNs follow z/OS naming conventions.
+context.jcl.ref=z/OS MVS JCL Reference (SA23-1385)
+context.jcl.url=https://www.ibm.com/docs/en/SSLTBW_2.5.0/pdf/ieab200.pdf
+
+# ==============================================================================
+# ALTERNATIVE PROVIDERS
+# ==============================================================================
+# To use these, verify the settings and change 'ai.provider' at the top.
+# You can also list multiple providers using 'ai.providers=openai,google,ollama'
+# to allow switching between them in the UI dropdown.
+
+# --- OPTION A: GOOGLE GEMINI ---
+# Get API Key: https://aistudio.google.com/app/apikey
+# Note: Uses the OpenAI-compatibility endpoint provided by Google.
+#
+# (Add 'google' to your 'ai.providers' list)
+# google.type=openai
+# google.apiKey=YOUR_GEMINI_KEY
+# google.endpoint=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+# google.models=gemini-1.5-flash, gemini-1.5-pro
+
+# --- OPTION B: OLLAMA / ANYTHINGLLM (LOCAL) ---
+# (Add 'ollama' to your 'ai.providers' list)
+# Download Ollama: https://ollama.com/
+# 1. Install Ollama
+# 2. Run: ollama pull llama3
+# 3. Ensure it is running on port 11434
+#
+# ollama.type=ollama
+# ollama.endpoint=http://localhost:11434
+# ollama.models=llama3, deepseek-coder-v2, mistral
+
+# --- Example: z/VM PDFs in local LLM
+# --- AnythingLLM Configuration ---
+# (Add 'docs' to your 'ai.providers' list)
+# We use 'openai' type because AnythingLLM speaks the OpenAI JSON format
+# docs.type=openai
+
+# The AnythingLLM OpenAI-compatible endpoint
+# Note: Ensure the path ends in /v1/chat/completions
+# docs.endpoint=http://192.168.1.xxx:3001/api/v1/openai/chat/completions
+
+# The API Key you generated in Phase 2 of the Ollama configurations (after you embed your PDFs):
+# docs.apiKey=xxxxxxx-xxxxxxx-xxxxxxx-xxxxxxx
+
+# The "Model" here is actually your Workspace Name (case sensitive)
+# Syntax: WorkspaceName (Display Name) The "Display Name" will appear in the Model drop-down.
+# docs.models=mainframe (Mainframe Manuals)

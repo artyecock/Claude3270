@@ -35,7 +35,17 @@ public class AIChatWindow extends JDialog {
         this.owner = owner;
         this.config = cfg;
         this.streamingClient = new AIStreamingClient(prov);
-        this.historyStore = new AIHistoryStore(cfg.get("ai.autosave.dir", "ai_history"));
+        //this.historyStore = new AIHistoryStore(cfg.get("ai.autosave.dir", "ai_history"));
+        // --- FIX: Anchor history directory to User Home ---
+        String rawDir = cfg.get("ai.autosave.dir", "ai_history");
+        java.io.File dir = new java.io.File(rawDir);
+        
+        // If the path is relative (e.g. "ai_history"), prepend user.home
+        if (!dir.isAbsolute()) {
+            dir = new java.io.File(System.getProperty("user.home"), rawDir);
+        }
+        
+        this.historyStore = new AIHistoryStore(dir.getAbsolutePath());
         
         // Cast owner to emulator
         this.emulator = (owner instanceof com.tn3270.TN3270Emulator) ? (com.tn3270.TN3270Emulator) owner : null;
