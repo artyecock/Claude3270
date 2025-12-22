@@ -26,3 +26,5 @@ replay_pid*
 
 # API key
 ai.conf
+
+.DS_Store

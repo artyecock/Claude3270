@@ -1,6 +1,8 @@
 # Claude3270
 Collaboration effort with AI to produce an Open Source TN3270 emulator in Java
 
+[Please read the src/Claude3270_QuickStart.md file for Quick Start information]]
+
 When my absolute favorite TN3270 emulator stopped working for a few of my target
 hosts, I started looking for a suitable replacement.  As I use MacOS, the replacement 
 options were limited, but reasonably priced.  
@@ -23,7 +25,7 @@ how essential they were to the project.
 
 ChatGPT was also part of this effort, but was used mostly for reading tcpdumps and
 troubleshooting various aspects of the code.  Claude.ai, however, really did the heavy
-lifting.
+lifting, with Gemini adding the UI polish.
 
 Although Claude3270 is a usable TN3270 emulator, the ultimate goal of this project
 morphed into content suitable for a VM Workshop presentation.  
