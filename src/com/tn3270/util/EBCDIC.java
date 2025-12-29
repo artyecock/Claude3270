@@ -6,6 +6,11 @@ public class EBCDIC {
     public static final char[] EBCDIC_TO_ASCII = new char[256];
     public static final byte[] ASCII_TO_EBCDIC = new byte[256];
     public static final char[] EBCDIC_TO_APL = new char[256];
+    
+    // NEW: Reverse mapping for APL (Sparse array using char as index)
+    // 64KB size is negligible in modern Java and allows O(1) lookup.
+    // (Nope, it's not negligible)
+    //public static final byte[] APL_TO_EBCDIC = new byte[65536]; 
 
     // Address decoding table
     public static final byte[] ADDRESS_TABLE = { 
@@ -23,6 +28,7 @@ public class EBCDIC {
         // Initialize with nulls
         Arrays.fill(EBCDIC_TO_ASCII, '\0');
         Arrays.fill(ASCII_TO_EBCDIC, (byte) 0x00);
+        //Arrays.fill(APL_TO_EBCDIC, (byte) 0x00); // Initialize new table
 
         // EBCDIC to ASCII mapping (CP037)
         EBCDIC_TO_ASCII[0x00] = '\0';
@@ -49,7 +55,10 @@ public class EBCDIC {
         EBCDIC_TO_ASCII[0x5F] = '^';
         EBCDIC_TO_ASCII[0x60] = '-';
         EBCDIC_TO_ASCII[0x61] = '/';
-        EBCDIC_TO_ASCII[0x6A] = '|';
+        //EBCDIC_TO_ASCII[0x6A] = '|';
+        // MODIFIED: Map 0x6A to Broken Bar '¦' instead of Pipe '|' to reduce ambiguity,
+        // though we will still force the reverse mapping below to be safe.
+        EBCDIC_TO_ASCII[0x6A] = '¦'; 
         EBCDIC_TO_ASCII[0x6B] = ',';
         EBCDIC_TO_ASCII[0x6C] = '%';
         EBCDIC_TO_ASCII[0x6D] = '_';
@@ -100,9 +109,16 @@ public class EBCDIC {
                 ASCII_TO_EBCDIC[c] = (byte) i;
             }
         }
+        
+        // CRITICAL FIX: Force Pipe '|' to map to Solid Vertical Bar (0x4F).
+        // Without this, the loop above maps '|' to 0x6A (Broken Bar) if 0x6A was mapped to '|',
+        // which breaks shell pipes on Linux (expects 0x4F).
+        ASCII_TO_EBCDIC['|'] = (byte) 0x4F;
+        ASCII_TO_EBCDIC['¦'] = (byte) 0x6A; 
 
         // Initialize APL character set
         System.arraycopy(EBCDIC_TO_ASCII, 0, EBCDIC_TO_APL, 0, 256);
+        
         EBCDIC_TO_APL[0xAD] = '┌'; 
         EBCDIC_TO_APL[0xC5] = '┌'; 
         EBCDIC_TO_APL[0xAE] = '┐'; 
@@ -117,7 +133,23 @@ public class EBCDIC {
         EBCDIC_TO_APL[0xC7] = '┴'; 
         EBCDIC_TO_APL[0xD3] = '┼'; 
         EBCDIC_TO_APL[0xA2] = '\u2500'; 
-        EBCDIC_TO_APL[0x85] = '\u2502'; 
+        // FIX: Use 'Left 1/8 Block' (\u258F) instead of 'Box Light Vertical' (\u2502).
+        // Blocks fill the entire line height (including leading), ensuring a 
+        // continuous vertical line without gaps on all displays.
+        //EBCDIC_TO_APL[0x85] = '\u2502'; 
+        //EBCDIC_TO_APL[0x85] = '\u258F'; 
+        // REVERT: Use Standard 'Box Drawings Light Vertical' (\u2502) for alignment.
+        // We will fix the "Gap/Shortness" issue via custom rendering in TerminalPanel.
+        EBCDIC_TO_APL[0x85] = '\u2502';
         EBCDIC_TO_APL[0xA3] = '\u25cf'; 
+        
+        // NEW: Populate Reverse APL Table
+        // This iterates through the populated EBCDIC_TO_APL to build the reverse map
+        //for (int i = 0; i < 256; i++) {
+        //    char c = EBCDIC_TO_APL[i];
+        //    if (c != '\0') {
+        //        APL_TO_EBCDIC[c] = (byte) i;
+        //    }
+        //}
     }
 }

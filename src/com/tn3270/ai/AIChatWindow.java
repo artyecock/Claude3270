@@ -11,6 +11,8 @@ import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.*;
 
+import java.nio.charset.StandardCharsets;
+
 public class AIChatWindow extends JDialog {
     private final Frame owner;
     public final AIChatScrollView chatView;
@@ -295,7 +297,6 @@ public class AIChatWindow extends JDialog {
             return;
         }
 
-        //String dataset = JOptionPane.showInputDialog(this, "Enter Host Dataset (e.g. USER.SOURCE(MAIN)):");
         String dataset = JOptionPane.showInputDialog(this, "Enter Host Dataset (e.g. USER.SOURCE(MAIN) or PROFILE EXEC A):");
         if (dataset == null || dataset.trim().isEmpty()) return;
 
@@ -304,18 +305,21 @@ public class AIChatWindow extends JDialog {
 
         com.tn3270.TN3270Session.MemoryTransferCallback callback = new com.tn3270.TN3270Session.MemoryTransferCallback() {
             @Override
-            public void onDownloadComplete(String content) {
+            public void onDownloadComplete(byte[] content) {
                 // 1. Check for Binary Garbage
-                if (AIManager.isLikelyBinary(content.getBytes())) {
+                if (AIManager.isLikelyBinary(content)) {
                     int confirm = JOptionPane.showConfirmDialog(AIChatWindow.this, 
                         "The file '" + dataset + "' appears to be binary.\nAttach anyway?", 
                         "Binary Warning", JOptionPane.YES_NO_OPTION);
                     if (confirm != JOptionPane.YES_OPTION) return;
                 }
 
-                // 2. Augment Prompt with Context (RAG)
+                // 2. Convert to String for AI (Assume UTF-8/Text)
+                String textContent = new String(content, StandardCharsets.UTF_8);
+
+                // 3. Augment Prompt with Context (RAG)
                 // Note: We default to TSO for now, or you can try to detect from session
-                String augmented = aiMgr.buildAugmentedPrompt(dataset, content, "TSO");
+                String augmented = aiMgr.buildAugmentedPrompt(dataset, textContent, "TSO");
 
                 SwingUtilities.invokeLater(() -> {
                     // Append to input area so the user can see/edit it before sending
@@ -335,8 +339,7 @@ public class AIChatWindow extends JDialog {
             }
         };
 
-        // Trigger Session Logic (TSO Default)
-        //session.downloadTextFromHost(dataset, com.tn3270.TN3270Session.HostType.TSO, callback); 
+        // Trigger Session Logic
         session.downloadTextFromHost(dataset, session.getHostType(), callback);
     }
 
@@ -360,60 +363,6 @@ public class AIChatWindow extends JDialog {
         }
         
         saveTextToHost(text);
-    }
-    
-    private void doSaveToHostOld() {
-        if (emulator == null) return;
-        com.tn3270.TN3270Session session = emulator.getCurrentSession();
-        if (session == null || !session.isConnected()) {
-            JOptionPane.showMessageDialog(this, "No active session connected.");
-            return;
-        }
-
-        // Try to get selected text from Chat View (Bubbles) OR Input Area
-        String text = null;
-        
-        // 1. Check Input Area Selection
-        text = inputArea.getSelectedText();
-        
-        // 2. If nothing, we might want to let the user select a specific bubble context?
-        // Since your chatView uses a custom ScrollView with Bubbles, standard text selection 
-        // might be tricky unless your AIMessageBubble supports copying.
-        // Fallback: If input is empty, maybe use the last AI response?
-        if (text == null && lastPrompt != null) {
-             // For now, let's just rely on Input Area or Clipboard.
-             // Or prompt the user: "Copy the text you want to save to the clipboard first?"
-        }
-        
-        // Check Clipboard as fallback if nothing selected
-        if (text == null) {
-            try {
-                text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
-            } catch(Exception e) {}
-        }
-
-        if (text == null || text.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please select text in the input area or copy text to clipboard first.");
-            return;
-        }
-
-        final String textToUpload = text; // Final for lambda
-
-        String dataset = JOptionPane.showInputDialog(this, "Save clipboard/selection to Dataset:");
-        if (dataset == null) return;
-
-        session.uploadTextToHost(textToUpload, dataset, session.getHostType(), new com.tn3270.TN3270Session.MemoryTransferCallback() {
-            @Override
-            public void onUploadComplete() {
-                JOptionPane.showMessageDialog(AIChatWindow.this, "Saved to " + dataset);
-            }
-            @Override
-            public void onDownloadComplete(String c) {}
-            @Override
-            public void onError(String msg) {
-                JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);
-            }
-        });
     }
     
     /**
@@ -445,7 +394,7 @@ public class AIChatWindow extends JDialog {
                 JOptionPane.showMessageDialog(AIChatWindow.this, "Successfully saved to " + dataset);
             }
             @Override
-            public void onDownloadComplete(String c) {}
+            public void onDownloadComplete(byte[] c) {} // FIXED SIGNATURE
             @Override
             public void onError(String msg) {
                 JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);

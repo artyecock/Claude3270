@@ -44,6 +44,8 @@ public class ProtocolConstants {
     public static final int ATTR_HIGHLIGHTING = 0x41;
     public static final int ATTR_FOREGROUND = 0x42;
     public static final int ATTR_BACKGROUND = 0x45;
+    public static final int ATTR_CHAR_SET = 0x43;
+    public static final byte CHARSET_APL = (byte) 0xF1;
 
     // -----------------------------------------------------------------------
     // 3270 AIDs (Attention IDs)

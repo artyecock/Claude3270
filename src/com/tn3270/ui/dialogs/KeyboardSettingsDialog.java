@@ -243,7 +243,7 @@ public class KeyboardSettingsDialog extends JDialog {
         btn.putClientProperty("chars", new String[] { normal, shifted });
         btn.addActionListener(e -> {
             String currentLbl = getVisualLabel(btn, shift3270Active);
-            KeyCaptureDialog cap = new KeyCaptureDialog(this, "Press physical key for '" + currentLbl + "'", false);
+            KeyCaptureDialog cap = new KeyCaptureDialog(this, "Press desired physical key to act as '" + currentLbl + "' key", false);
             cap.setVisible(true);
             if (cap.cleared) {
                 char targetC = currentLbl.equals("Space") ? ' ' : currentLbl.charAt(0);

@@ -7,6 +7,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 
+import static com.tn3270.constants.ProtocolConstants.*;
+
 public class TerminalPanel extends JPanel implements Scrollable {
 
     private final ScreenModel screenModel;
@@ -27,6 +29,8 @@ public class TerminalPanel extends JPanel implements Scrollable {
     
     // NEW: Explicit Blink State
     private boolean blinkState = true; 
+    
+    private boolean paintingEnabled = true;
 
     public TerminalPanel(ScreenModel model) {
         this.screenModel = model;
@@ -160,6 +164,11 @@ public class TerminalPanel extends JPanel implements Scrollable {
         repaint();
     }
     
+    public void setPaintingEnabled(boolean b) {
+        this.paintingEnabled = b;
+        if (b) repaint(); // Force a refresh when re-enabling
+    }
+    
     public boolean isShowCrosshair() { 
     	return showCrosshair; 
     }
@@ -189,6 +198,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         if (screenModel == null) return;
+        if (!paintingEnabled) return; // Skip painting if frozen
         
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -232,6 +242,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
         byte[] attr = screenModel.getAttributes();
         byte[] extColors = screenModel.getExtendedColors();
         byte[] highlight = screenModel.getHighlight();
+        byte[] charsets = screenModel.getCharsets(); // NEW: Get Charset Array
         Color[] palette = screenModel.getPalette();
         
         //boolean blinkVisible = (System.currentTimeMillis() / 500) % 2 == 0;
@@ -243,11 +254,20 @@ public class TerminalPanel extends JPanel implements Scrollable {
                 if (pos >= buffer.length) break;
 
                 char c = buffer[pos];
+                //byte charset = screenModel.getCharset(pos); // Get the context
+                //byte charset = charsets[pos];
                 //if (screenModel.isFieldStart(pos)) c = ' ';
-                boolean isAttrByte = screenModel.isFieldStart(pos); // Helper bool
+                boolean isAttrByte = screenModel.isFieldStart(pos); 
                 
                 if (isAttrByte) c = ' ';
                 if (c == '\0') c = ' ';
+                
+                // --- NEW: APL/Charset Mapping ---
+                // If the charset for this position indicates APL (0xF1), 
+                // we assume 'c' already holds the correct mapped char from processOrders 
+                // (e.g. \u2502). We use this flag for custom rendering logic.
+                byte cs = charsets[pos];
+                boolean isAPL = (cs == CHARSET_APL);
 
                 Color fg = getForeground();
                 Color bg = getBackground();
@@ -313,8 +333,54 @@ public class TerminalPanel extends JPanel implements Scrollable {
                 }
 
                 g2d.setColor(fg);
+                //g2d.drawString(String.valueOf(c), x, y + charAscent);
+                
+                //new
+                // If it's a pipe AND we are in APL context, make it tall
+                if (c == '|' && isAPL) {
+                    
+                    // OPTION A: Swap to Unicode Box Drawing char
+                    // (Simplest, assumes font supports U+2502)
+                    //c = '\u2502'; 
+                    
+                    // OPTION B: Manual Drawing (If you want "Continuous" lines)
+                    // If you want lines to touch exactly, fonts often leave gaps.
+                    // You can draw a line manually:
+                    
+                    //int cx = col * charWidth;
+                    //int cy = row * charHeight;
+                    g2d.setColor(fg); // Use current foreground
+                    
+                    // FIX: Use 'x' and 'y' (which include margins), not raw col/row calcs
+                    int centerX = x + (charWidth / 2);
+                    
+                    // Draw line down the exact center, full height
+                    g2d.drawLine(centerX, y, centerX, y + charHeight);
+                    
+                    // Draw line down the exact center
+                    //g2d.drawLine(cx + charWidth/2, cy, cx + charWidth/2, cy + charHeight);
+                    continue; // Skip standard string drawing
+        
+                    // A System.out.println inserted here, to print row/column of pipe character
+                    // showed continuous output, even after screen was painted.
+                }
+                
+                // Draw the character
                 g2d.drawString(String.valueOf(c), x, y + charAscent);
-
+                //new
+                // --- NEW: Custom Rendering for APL Vertical Bar ---
+                // If it's the Box Drawings Vertical (\u2502), draw a manual line 
+                // to ensure it connects vertically without font gaps.
+                /*
+                if (c == '\u2502' || c == '|') {
+                    // Calculate center of cell
+                    int centerX = x + (charWidth / 2);
+                    // Draw full height (y to y+height)
+                    g2d.drawLine(centerX, y, centerX, y + charHeight);
+                } else {
+                    g2d.drawString(String.valueOf(c), x, y + charAscent);
+                }
+*/
                 if (underscore && !isHidden) {
                     //g2d.drawLine(x, y + charAscent + 2, x + charWidth, y + charAscent + 2);
                 	
@@ -337,29 +403,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
                 }
             }
         }
-        /*
-        // Draw Cursor
-        if (!screenModel.isKeyboardLocked() && hasFocus()) {
-            int cPos = screenModel.getCursorPos();
-            if (cPos >= 0 && cPos < buffer.length) {
-                int cRow = cPos / cols;
-                int cCol = cPos % cols;
-                int cx = marginLeft + (cCol * charWidth);
-                int cy = marginTop + (cRow * charHeight);
 
-                g2d.setColor(screenModel.getCursorColor());
-                if (cursorStyle == CursorStyle.BLOCK) {
-                    g2d.setXORMode(getBackground());
-                    g2d.fillRect(cx, cy, charWidth, charHeight);
-                    g2d.setPaintMode();
-                } else if (cursorStyle == CursorStyle.UNDERSCORE) {
-                    g2d.fillRect(cx, cy + charHeight - 2, charWidth, 2);
-                } else {
-                    g2d.fillRect(cx, cy, 2, charHeight);
-                }
-            }
-        }
-        */
         // 5. DRAW CURSOR & CROSSHAIR
         if (!screenModel.isKeyboardLocked() && hasFocus()) {
             int cPos = screenModel.getCursorPos();
