@@ -51,7 +51,7 @@ To use the "Ask AI", "Attach Host File", and "Explain Code" features, you need a
 ---
 
 ### 5. Configure the Emulator
-Create a file named `.tn3270ai` (copy the .tn3270ai.sample from the src folder) in the project root folder (where the `.jar` is) and paste the following configuration. **Replace `YOUR_KEY_HERE` with the key you just copied.**
+Create a file named `.tn3270ai` (copy the .tn3270ai.sample from the src folder) in your home directory and paste the following configuration. **Replace `YOUR_KEY_HERE` with the key you just copied.**
 
 ```properties
 # .tn3270ai
