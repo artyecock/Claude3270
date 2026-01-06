@@ -1,19 +1,76 @@
 package com.tn3270;
 
-import com.tn3270.ui.EnhancedRibbonToolbar;
-import com.tn3270.ui.ModernKeyboardPanel;
-
-import javax.swing.*;
-import javax.swing.border.*;
-import java.awt.*;
-import java.awt.event.*;
-import java.io.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.awt.event.InputEvent;
+import java.awt.event.ItemEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.ButtonGroup;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComboBox;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+
+import com.tn3270.ui.EnhancedRibbonToolbar;
+import com.tn3270.ui.ModernKeyboardPanel;
+import com.tn3270.util.LoggerSetup;
 
 public class TN3270Emulator extends JFrame {
+	private static final Logger logger = LoggerSetup.getLogger(TN3270Emulator.class);
 
 	// =======================================================================
 	// 1. STATE & ENUMS
@@ -196,18 +253,20 @@ public class TN3270Emulator extends JFrame {
 
 				// 1. Set the font
 				session.setFontSizeNoResize(defSize);
-				
-				// 2. Force the TerminalPanel to recalculate its preferred size based on the new font
+
+				// 2. Force the TerminalPanel to recalculate its preferred size based on the new
+				// font
 				session.terminalPanel.updateSize();
 
-				// 3. CRITICAL FIX: Validate the session container. 
-				// This forces the JScrollPane to detect the new preferred size of the TerminalPanel.
+				// 3. CRITICAL FIX: Validate the session container.
+				// This forces the JScrollPane to detect the new preferred size of the
+				// TerminalPanel.
 				// Without this, the JScrollPane might report an old/default size to the Frame.
-				session.validate(); 
+				session.validate();
 
 				// 4. Use the session's robust snap logic (handles screen bounds & insets)
 				session.snapWindow();
-				
+
 				// 5. Center
 				this.setLocationRelativeTo(null);
 			});
@@ -856,35 +915,27 @@ public class TN3270Emulator extends JFrame {
 		downloadItem.addActionListener(e -> showFileTransferDialog(true));
 		fileMenu.add(downloadItem);
 		/*
-        // --- NEW: HOST SYSTEM TOGGLE ---
-        fileMenu.addSeparator();
-        JMenu hostTypeMenu = new JMenu("Host System");
-        
-        JRadioButtonMenuItem rbTSO = new JRadioButtonMenuItem("TSO (z/OS)");
-        JRadioButtonMenuItem rbCMS = new JRadioButtonMenuItem("CMS (z/VM)");
-        ButtonGroup hostGroup = new ButtonGroup();
-        hostGroup.add(rbTSO);
-        hostGroup.add(rbCMS);
-        
-        // Listener to update the CURRENT session when clicked
-        ActionListener hostTypeListener = e -> {
-            TN3270Session s = getCurrentSession();
-            if (s != null) {
-                if (rbTSO.isSelected()) s.setHostType(TN3270Session.HostType.TSO);
-                else s.setHostType(TN3270Session.HostType.CMS);
-            }
-        };
-        
-        rbTSO.addActionListener(hostTypeListener);
-        rbCMS.addActionListener(hostTypeListener);
-        
-        // Default selection (visual only, real state is in Session)
-        rbCMS.setSelected(true); 
-        
-        hostTypeMenu.add(rbTSO);
-        hostTypeMenu.add(rbCMS);
-        fileMenu.add(hostTypeMenu);
-        */
+		 * // --- NEW: HOST SYSTEM TOGGLE --- fileMenu.addSeparator(); JMenu
+		 * hostTypeMenu = new JMenu("Host System");
+		 * 
+		 * JRadioButtonMenuItem rbTSO = new JRadioButtonMenuItem("TSO (z/OS)");
+		 * JRadioButtonMenuItem rbCMS = new JRadioButtonMenuItem("CMS (z/VM)");
+		 * ButtonGroup hostGroup = new ButtonGroup(); hostGroup.add(rbTSO);
+		 * hostGroup.add(rbCMS);
+		 * 
+		 * // Listener to update the CURRENT session when clicked ActionListener
+		 * hostTypeListener = e -> { TN3270Session s = getCurrentSession(); if (s !=
+		 * null) { if (rbTSO.isSelected()) s.setHostType(TN3270Session.HostType.TSO);
+		 * else s.setHostType(TN3270Session.HostType.CMS); } };
+		 * 
+		 * rbTSO.addActionListener(hostTypeListener);
+		 * rbCMS.addActionListener(hostTypeListener);
+		 * 
+		 * // Default selection (visual only, real state is in Session)
+		 * rbCMS.setSelected(true);
+		 * 
+		 * hostTypeMenu.add(rbTSO); hostTypeMenu.add(rbCMS); fileMenu.add(hostTypeMenu);
+		 */
 		fileMenu.addSeparator();
 		JMenuItem disconnectItem = new JMenuItem("Disconnect");
 		disconnectItem.addActionListener(e -> disconnect());
@@ -1210,7 +1261,10 @@ public class TN3270Emulator extends JFrame {
 				}
 			}
 		} catch (IOException e) {
-			System.err.println("Error loading profiles: " + e.getMessage());
+			//System.err.println("Error loading profiles: " + e.getMessage());
+	        logger.severe("Error loading profiles: " + e.getMessage());
+	        // Or with full stack trace:
+	        // logger.log(Level.SEVERE, "Error loading profiles", e);
 		}
 	}
 
@@ -1222,7 +1276,8 @@ public class TN3270Emulator extends JFrame {
 				writer.newLine();
 			}
 		} catch (IOException e) {
-			System.err.println("Error saving profiles: " + e.getMessage());
+			//System.err.println("Error saving profiles: " + e.getMessage());
+			logger.severe("Error saving profiles: " + e.getMessage());
 		}
 	}
 
@@ -1253,8 +1308,7 @@ public class TN3270Emulator extends JFrame {
 		JOptionPane.showMessageDialog(this,
 				"TN3270 Emulator\nVersion 2.3 (Tabbed/Tiled/Pop-out/Pop-in)\n\n"
 						+ "Features:\n- Multiple View Modes\n- Session Management\n- AI Assistant\n- IND$FILE\n\n"
-						+ "Design by: Arty Ecock\n"
-						+ "Coding by: Claude, ChatGPT and Gemnini",
+						+ "Design by: Arty Ecock\n" + "Coding by: Claude, ChatGPT and Gemnini",
 				"About", JOptionPane.INFORMATION_MESSAGE);
 	}
 

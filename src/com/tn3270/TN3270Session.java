@@ -1,37 +1,174 @@
 package com.tn3270;
 
+import static com.tn3270.constants.ProtocolConstants.AID_CLEAR;
+import static com.tn3270.constants.ProtocolConstants.AID_ENTER;
+import static com.tn3270.constants.ProtocolConstants.AID_PA1;
+import static com.tn3270.constants.ProtocolConstants.AID_PA2;
+import static com.tn3270.constants.ProtocolConstants.AID_PA3;
+import static com.tn3270.constants.ProtocolConstants.AID_PF1;
+import static com.tn3270.constants.ProtocolConstants.AID_PF24;
+import static com.tn3270.constants.ProtocolConstants.AID_STRUCTURED_FIELD;
+import static com.tn3270.constants.ProtocolConstants.ATTR_CHAR_SET;
+import static com.tn3270.constants.ProtocolConstants.ATTR_FIELD;
+import static com.tn3270.constants.ProtocolConstants.ATTR_FOREGROUND;
+import static com.tn3270.constants.ProtocolConstants.ATTR_HIGHLIGHTING;
+import static com.tn3270.constants.ProtocolConstants.CHARSET_APL;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_ALL_UNPROTECTED_0F;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_ALL_UNPROTECTED_6F;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_WRITE_05;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_WRITE_ALTERNATE_0D;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_WRITE_ALTERNATE_7E;
+import static com.tn3270.constants.ProtocolConstants.CMD_ERASE_WRITE_F5;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_BUFFER_02;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_BUFFER_F2;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_06;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_F6;
+import static com.tn3270.constants.ProtocolConstants.CMD_WRITE_01;
+import static com.tn3270.constants.ProtocolConstants.CMD_WRITE_F1;
+import static com.tn3270.constants.ProtocolConstants.CMD_WSF_11;
+import static com.tn3270.constants.ProtocolConstants.CMD_WSF_F3;
+import static com.tn3270.constants.ProtocolConstants.DC_CLOSE;
+import static com.tn3270.constants.ProtocolConstants.DC_GET;
+import static com.tn3270.constants.ProtocolConstants.DC_INSERT;
+import static com.tn3270.constants.ProtocolConstants.DC_OPEN;
+import static com.tn3270.constants.ProtocolConstants.DC_SET_CURSOR;
+import static com.tn3270.constants.ProtocolConstants.ORDER_EUA;
+import static com.tn3270.constants.ProtocolConstants.ORDER_GE;
+import static com.tn3270.constants.ProtocolConstants.ORDER_IC;
+import static com.tn3270.constants.ProtocolConstants.ORDER_PT;
+import static com.tn3270.constants.ProtocolConstants.ORDER_RA;
+import static com.tn3270.constants.ProtocolConstants.ORDER_SA;
+import static com.tn3270.constants.ProtocolConstants.ORDER_SBA;
+import static com.tn3270.constants.ProtocolConstants.ORDER_SF;
+import static com.tn3270.constants.ProtocolConstants.ORDER_SFE;
+import static com.tn3270.constants.ProtocolConstants.RESP_NEGATIVE;
+import static com.tn3270.constants.ProtocolConstants.RESP_POSITIVE;
+import static com.tn3270.constants.ProtocolConstants.SFID_DATA_CHAIN;
+import static com.tn3270.constants.ProtocolConstants.WCC_ALARM;
+import static com.tn3270.constants.ProtocolConstants.WCC_RESET;
+import static com.tn3270.constants.ProtocolConstants.WCC_RESET_MDT;
+import static com.tn3270.constants.TelnetConstants.DO;
+import static com.tn3270.constants.TelnetConstants.DONT;
+import static com.tn3270.constants.TelnetConstants.EOR;
+import static com.tn3270.constants.TelnetConstants.IAC;
+import static com.tn3270.constants.TelnetConstants.OPT_BINARY;
+import static com.tn3270.constants.TelnetConstants.OPT_EOR;
+import static com.tn3270.constants.TelnetConstants.OPT_TERMINAL_TYPE;
+import static com.tn3270.constants.TelnetConstants.OPT_TN3270E;
+import static com.tn3270.constants.TelnetConstants.SB;
+import static com.tn3270.constants.TelnetConstants.SE;
+import static com.tn3270.constants.TelnetConstants.TN3270E_DT_3270_DATA;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_CONNECT;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_DEVICE_TYPE;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_FUNCTIONS;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_IS;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_REQUEST;
+import static com.tn3270.constants.TelnetConstants.TN3270E_OP_SEND;
+import static com.tn3270.constants.TelnetConstants.WILL;
+import static com.tn3270.constants.TelnetConstants.WONT;
+import static com.tn3270.util.EBCDIC.ADDRESS_TABLE;
+import static com.tn3270.util.EBCDIC.ASCII_TO_EBCDIC;
+import static com.tn3270.util.EBCDIC.EBCDIC_TO_APL;
+import static com.tn3270.util.EBCDIC.EBCDIC_TO_ASCII;
+
+import com.tn3270.util.LoggerSetup;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.Window;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Logger;
+
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
+import javax.swing.JDialog;
+import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
+import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.SwingConstants;
+import javax.swing.DefaultComboBoxModel;
+
 import com.tn3270.ai.AIManager;
 import com.tn3270.model.ScreenModel;
 import com.tn3270.ui.StatusBar;
 import com.tn3270.ui.TerminalPanel;
 import com.tn3270.ui.dialogs.KeyboardSettingsDialog;
 
-import java.awt.*;
-import java.awt.datatransfer.*;
-import java.awt.event.*;
-import java.io.*;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.List;
-import javax.net.SocketFactory;
-import javax.net.ssl.*;
-import javax.swing.*;
-import javax.swing.Timer;
-import javax.swing.border.*;
-
-import java.util.Base64;
-import java.util.ArrayList;
-
-import static com.tn3270.constants.TelnetConstants.*;
-import static com.tn3270.constants.ProtocolConstants.*;
-import static com.tn3270.util.EBCDIC.*;
-
 public class TN3270Session extends JPanel implements KeyListener {
+	private static final Logger logger = LoggerSetup.getLogger(TN3270Session.class);
+
+	private static final String COLORS_FILE = System.getProperty("user.home") + File.separator + ".tn3270colors";
+	private static final String DEFAULT_SCHEME_FILE = System.getProperty("user.home") + File.separator
+			+ ".tn3270default";
 
 	public interface MemoryTransferCallback {
 		void onDownloadComplete(byte[] content); // UPDATED: byte[] instead of String
+
 		void onUploadComplete();
+
 		void onError(String message);
 	}
 
@@ -54,7 +191,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private static final int STATE_DO = 5;
 	private static final int STATE_DONT = 6;
 
-	private static final byte SF_ID_SET_REPLY_MODE = (byte) 0x09;
+	private static final byte SFID_SET_REPLY_MODE = (byte) 0x09;
 
 	private enum FileTransferState {
 		IDLE, OPEN_SENT, TRANSFER_IN_PROGRESS, CLOSE_SENT, ERROR
@@ -68,13 +205,19 @@ public class TN3270Session extends JPanel implements KeyListener {
 		TSO, CMS, LINUX
 	}
 
+	// AI Service Constants
+	private static final int SFID_DEST_ORIGIN = 0x0F;
+	private static final int AI_SERVICE_ID = 0x00AE; // Matches the ID in sendQueryResponse
+
 	private enum ReplyMode {
 		FIELD, EXTENDED_FIELD, CHARACTER
 	}
 
 	private static final Map<String, ColorScheme> COLOR_SCHEMES = new HashMap<>();
 
-	public static class ColorScheme {
+	public static class ColorScheme implements Serializable {
+		private static final long serialVersionUID = 1L;
+
 		Color background, defaultFg, cursor;
 		Color[] colors;
 
@@ -141,6 +284,37 @@ public class TN3270Session extends JPanel implements KeyListener {
 						new Color[] { new Color(0, 43, 54), new Color(38, 139, 210), new Color(220, 50, 47),
 								new Color(211, 54, 130), new Color(133, 153, 0), new Color(42, 161, 152),
 								new Color(181, 137, 0), new Color(238, 232, 213) }));
+		
+		// 7. Modern Vibrant (Custom Palette for high visibility on Black)
+				// Includes "Easter Egg" Pink and "Sky" Blue
+				COLOR_SCHEMES.put("Modern Vibrant",
+						new ColorScheme(Color.BLACK, new Color(100, 230, 120), Color.WHITE, // BG, Default FG (Green), Cursor
+								new Color[] { 
+										Color.BLACK,             // 0: N/A
+										new Color(50, 150, 255), // 1: Blue (Sky Blue)
+										new Color(255, 100, 100),// 2: Red (Soft Salmon)
+										new Color(255, 150, 210),// 3: Pink (Easter Egg / Carnation)
+										new Color(100, 230, 120),// 4: Green (Spring Green)
+										new Color(80, 220, 255), // 5: Turquoise (Soft Cyan)
+										new Color(255, 235, 120),// 6: Yellow (Soft Gold)
+										Color.WHITE              // 7: White
+								}));
+
+		// NEW: Load custom user schemes from disk
+		loadCustomSchemes();
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void loadCustomSchemes() {
+		File f = new File(COLORS_FILE);
+		if (f.exists()) {
+			try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f))) {
+				Map<String, ColorScheme> custom = (Map<String, ColorScheme>) ois.readObject();
+				COLOR_SCHEMES.putAll(custom);
+			} catch (Exception e) {
+				System.err.println("Error loading custom colors: " + e.getMessage());
+			}
+		}
 	}
 
 	private ScreenModel screenModel;
@@ -275,6 +449,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 			applyColorScheme("Amber on Black");
 		}
 
+		// NEW: Apply user-designated default scheme (Overrides specific model defaults)
+		applyDefaultScheme();
+
 		// blinkTimer = new Timer(500, e -> terminalPanel.repaint());
 		// blinkTimer.start();
 		// FIX: Explicitly toggle the blink state
@@ -289,7 +466,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		addKeyListener(this);
 		terminalPanel.addKeyListener(this);
 		initializeKeyMappings();
-		
+
 		// --- FIX: Initialize Context Menu ---
 		setupMouseShortcuts();
 
@@ -321,40 +498,6 @@ public class TN3270Session extends JPanel implements KeyListener {
 		// ---------------------------------------------------------
 		// FIX PART 1: Handle Tab Switching / Initial Display
 		// ---------------------------------------------------------
-		/*
-		 * addHierarchyListener(e -> { if ((e.getChangeFlags() &
-		 * HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && isDisplayable()) {
-		 * 
-		 * // 1. Initial Size Update SwingUtilities.invokeLater(() ->
-		 * terminalPanel.updateSize());
-		 * 
-		 * // 2. AUTO-FIT LOGIC: If we are being added to a container with existing
-		 * dimensions // (like a TabbedPane that is already on screen), fit the font to
-		 * it. // If it's a new window (width=0), the Smart Default in TerminalPanel
-		 * handles it. // //Container parentContainer = getParent(); //if
-		 * (parentContainer != null && parentContainer.getWidth() > 0 &&
-		 * parentContainer.getHeight() > 0) { // SwingUtilities.invokeLater(() -> //
-		 * terminalPanel.fitToSize(parentContainer.getWidth(),
-		 * parentContainer.getHeight()) // ); //} //
-		 * 
-		 * // If the container has size, fit the font immediately if (getWidth() > 0 &&
-		 * getHeight() > 0) { terminalPanel.fitToSize(getWidth(), getHeight()); } } });
-		 */
-
-		// ---------------------------------------------------------
-		// FIX PART 2: Handle Window Resizing (The "Black Bars" Fix)
-		// ---------------------------------------------------------
-		/*
-		 * addComponentListener(new ComponentAdapter() {
-		 * 
-		 * @Override public void componentShown(ComponentEvent e) {
-		 * terminalPanel.requestFocusInWindow(); }
-		 * 
-		 * @Override public void componentResized(ComponentEvent e) { // When window is
-		 * resized, recalculate font to fill space if (getWidth() > 0 && getHeight() >
-		 * 0) { terminalPanel.fitToSize(getWidth(), getHeight()); } } });
-		 */
-
 		// --- FIX 1: Initial Layout (HierarchyListener) ---
 		addHierarchyListener(e -> {
 			if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && isDisplayable()) {
@@ -380,23 +523,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 				});
 			}
 		});
-
-		// --- FIX 2: Dynamic Resizing (ComponentListener) ---
-		/*
-		 * addComponentListener(new ComponentAdapter() {
-		 * 
-		 * @Override public void componentShown(ComponentEvent e) {
-		 * terminalPanel.requestFocusInWindow(); }
-		 * 
-		 * @Override public void componentResized(ComponentEvent e) { // FIX: Use
-		 * scrollPane dimensions, NOT 'this' dimensions // 'this.getHeight()' includes
-		 * the StatusBar, causing the calculation // to overshoot the available viewport
-		 * space. if (scrollPane.getWidth() > 0 && scrollPane.getHeight() > 0) {
-		 * terminalPanel.fitToSize(scrollPane.getWidth(), scrollPane.getHeight()); } }
-		 * });
-		 */
 	}
-	
+
 	private void setupMouseShortcuts() {
 		// Define our Interceptor Listener
 		MouseAdapter aiShortcutListener = new MouseAdapter() {
@@ -413,7 +541,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 			private void handleMouseAction(MouseEvent e) {
 				// Determine if this event is for a "right-click" gesture on any platform.
 				// This includes physical right-clicks (SwingUtilities.isRightMouseButton)
-				// and OS-emulated right-clicks (e.isPopupTrigger, which handles Mac Ctrl+Click).
+				// and OS-emulated right-clicks (e.isPopupTrigger, which handles Mac
+				// Ctrl+Click).
 				boolean isRightClickGesture = SwingUtilities.isRightMouseButton(e) || e.isPopupTrigger();
 
 				// --- CRITICAL FIX ---
@@ -428,7 +557,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				// (usually the release on Windows, or the press/release for Mac Ctrl+Click)
 				if (e.isPopupTrigger()) {
 					String selectedText = terminalPanel.getSelectedText();
-					
+
 					// Launch AI dialog. If no text selected, it opens empty.
 					showAIChatDialog(getParentFrame(), selectedText != null ? selectedText : "");
 				}
@@ -436,9 +565,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 		};
 
 		// --- LISTENER PRIORITY HACK (Essential for overriding default behavior) ---
-		// We must ensure 'aiShortcutListener' runs BEFORE any of TerminalPanel's default listeners.
-		// Standard Swing adds listeners to the END of the list. We need to be at the FRONT.
-		
+		// We must ensure 'aiShortcutListener' runs BEFORE any of TerminalPanel's
+		// default listeners.
+		// Standard Swing adds listeners to the END of the list. We need to be at the
+		// FRONT.
+
 		// 1. Temporarily remove all existing MouseListeners from TerminalPanel
 		MouseListener[] existingListeners = terminalPanel.getMouseListeners();
 		for (MouseListener l : existingListeners) {
@@ -453,73 +584,17 @@ public class TN3270Session extends JPanel implements KeyListener {
 			terminalPanel.addMouseListener(l);
 		}
 	}
-	
-	private void setupMouseShortcutsOld() {
-		// 1. Define our Interceptor Listener
-		MouseAdapter aiShortcutListener = new MouseAdapter() {
-			@Override
-			public void mousePressed(MouseEvent e) {
-				handleMouseAction(e);
-			}
 
-			@Override
-			public void mouseReleased(MouseEvent e) {
-				handleMouseAction(e);
-			}
-
-			private void handleMouseAction(MouseEvent e) {
-				// DETECT TRIGGER:
-				// 1. Standard Popup Trigger (Windows Right-Click, Mac Ctrl+Click)
-				// 2. Explicit Mac check: Ctrl is down + Button 1
-				boolean isTrigger = e.isPopupTrigger() || 
-				                   (e.isControlDown() && SwingUtilities.isLeftMouseButton(e));
-
-				if (isTrigger) {
-					// CRITICAL: Consume immediately so the TerminalPanel (next listener)
-					// does NOT see this event and does NOT clear the selection.
-					e.consume();
-
-					// Only fire on release (or press, depending on preference, but usually one fires)
-					// We check consume to ensure we don't double-fire if both press/release match.
-					// A simple way is to check the text presence again.
-					
-					String selectedText = terminalPanel.getSelectedText();
-					if (selectedText != null && !selectedText.isEmpty()) {
-						// We found text! Launch AI.
-						showAIChatDialog(getParentFrame(), selectedText);
-					} 
-				}
-			}
-		};
-
-		// 2. LISTENER PRIORITY HACK
-		// We must ensure 'aiShortcutListener' runs BEFORE the TerminalPanel's internal listeners.
-		// Standard Swing adds listeners to the END of the list. We need to be at the FRONT.
-		
-		// A. Remove all existing listeners (temporarily)
-		MouseListener[] existingListeners = terminalPanel.getMouseListeners();
-		for (MouseListener l : existingListeners) {
-			terminalPanel.removeMouseListener(l);
-		}
-
-		// B. Add OUR listener first
-		terminalPanel.addMouseListener(aiShortcutListener);
-
-		// C. Add the original listeners back behind ours
-		for (MouseListener l : existingListeners) {
-			terminalPanel.addMouseListener(l);
-		}
+	public void setHostType(HostType t) {
+		this.hostType = t;
+		// Optional: Update status bar to show TSO or CMS
+		if (statusBar != null)
+			statusBar.setStatus("Host System set to " + t);
 	}
-	
-    public void setHostType(HostType t) {
-        this.hostType = t;
-        // Optional: Update status bar to show TSO or CMS
-        if (statusBar != null) statusBar.setStatus("Host System set to " + t);
-    }
 
-    public HostType getHostType() {
-        return this.hostType;
-    }
+	public HostType getHostType() {
+		return this.hostType;
+	}
 
 	public String getModelName() {
 		return modelName;
@@ -587,6 +662,22 @@ public class TN3270Session extends JPanel implements KeyListener {
 	// =======================================================================
 	// 9. DELEGATES & DIALOGS
 	// =======================================================================
+	private void applyDefaultScheme() {
+		File f = new File(DEFAULT_SCHEME_FILE);
+		if (f.exists()) {
+			try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+				String name = br.readLine();
+				if (name != null && !name.trim().isEmpty()) {
+					name = name.trim();
+					if (COLOR_SCHEMES.containsKey(name)) {
+						applyColorScheme(name);
+					}
+				}
+			} catch (Exception e) {
+				// Ignore errors, fall back to default
+			}
+		}
+	}
 
 	public void applyColorScheme(String schemeName) {
 		ColorScheme scheme = COLOR_SCHEMES.get(schemeName);
@@ -969,17 +1060,17 @@ public class TN3270Session extends JPanel implements KeyListener {
 				if (!screenModel.isAlternateSize()) {
 					screenModel.setUseAlternateSize(true);
 					terminalPanel.updateSize();
-					
+
 					// FIX: Snap window on model change
-                    SwingUtilities.invokeLater(this::snapWindow); 
+					SwingUtilities.invokeLater(this::snapWindow);
 				}
 			} else if (cmd == CMD_ERASE_WRITE_05 || cmd == CMD_ERASE_WRITE_F5) {
 				if (screenModel.isAlternateSize()) {
 					screenModel.setUseAlternateSize(false);
 					terminalPanel.updateSize();
-					
+
 					// FIX: Snap window on model change
-                    SwingUtilities.invokeLater(this::snapWindow);
+					SwingUtilities.invokeLater(this::snapWindow);
 				}
 			}
 			if (off < data.length) {
@@ -987,21 +1078,22 @@ public class TN3270Session extends JPanel implements KeyListener {
 				if ((wcc & WCC_RESET) != 0) {
 					keyboardLocked = false;
 					replyModeFlags = 0;
-					
+
 					// FIX: Reset Insert Mode on Keyboard Unlock
 					if (insertMode) {
 						insertMode = false;
 						// Visually reset cursor to Block (or user preference if we tracked it)
 						terminalPanel.setCursorStyle(TerminalPanel.CursorStyle.BLOCK);
-						if (statusBar != null) statusBar.setStatus("Overwrite Mode");
+						if (statusBar != null)
+							statusBar.setStatus("Overwrite Mode");
 					}
 				}
 				if ((wcc & WCC_RESET_MDT) != 0)
 					screenModel.resetMDT();
 				if ((wcc & WCC_ALARM) != 0 && enableSound)
 					Toolkit.getDefaultToolkit().beep();
-				
-				//processOrders(data, off);
+
+				// processOrders(data, off);
 				// FIX: Determine correct starting buffer address
 				// CMD_WRITE (0x01/0xF1) starts at CURRENT cursor position.
 				// CMD_ERASE_WRITE (0x05/etc) starts at 0 (screen was cleared).
@@ -1009,9 +1101,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 				if (cmd == CMD_WRITE_01 || cmd == CMD_WRITE_F1) {
 					initialPos = screenModel.getCursorPos();
 				}
-				
+
 				processOrders(data, off, initialPos);
-				
+
 				// --- FIX: Notify the uploader thread that screen state changed ---
 				// We do this AFTER processing orders so isStatusNotAccepted() sees new text.
 				synchronized (keyboardLockMonitor) {
@@ -1027,21 +1119,37 @@ public class TN3270Session extends JPanel implements KeyListener {
 			processWSF(data, off);
 		else if (cmd == CMD_ERASE_ALL_UNPROTECTED_0F || cmd == CMD_ERASE_ALL_UNPROTECTED_6F)
 			eraseAllUnprotected();
+
+		// OPTIMIZATION: Check if screen has blinking attributes
+		boolean hasBlink = false;
+		byte[] highlights = screenModel.getHighlight();
+		int size = screenModel.getSize();
+
+		// Fast scan of the highlight array
+		for (int i = 0; i < size; i++) {
+			// 0xF1 is the code for Blink
+			if ((highlights[i] & 0xFF) == 0xF1) {
+				hasBlink = true;
+				break;
+			}
+		}
+		terminalPanel.setHasBlinkingText(hasBlink);
+
 		terminalPanel.repaint();
-		
+
 		// Force layout re-check
 		this.revalidate();
-		
+
 		updateStatusBar();
 	}
-	
+
 	private void processOrders(byte[] data, int offset, int initialPos) {
 		int p = initialPos; // FIX: Use passed initial position
 		int i = offset;
 		int[] idx = { 0 };
 		char c;
 		int bufLen = screenModel.getSize();
-		
+
 		// Reset state at start of Write/Erase Write
 		screenModel.setCurrentColor((byte) 0);
 		screenModel.setCurrentHighlight((byte) 0);
@@ -1049,7 +1157,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 		while (i < data.length) {
 			int b = data[i++] & 0xFF;
-			
+
 			if (b == ORDER_SF) {
 				if (i < data.length) {
 					screenModel.setAttr(p, data[i++]);
@@ -1057,35 +1165,40 @@ public class TN3270Session extends JPanel implements KeyListener {
 					screenModel.setExtendedColor(p, (byte) 0);
 					screenModel.setHighlight(p, (byte) 0);
 					screenModel.setCharset(p, (byte) 0); // Reset for field start
-					
+
 					// SF resets currents
 					screenModel.setCurrentColor((byte) 0);
 					screenModel.setCurrentHighlight((byte) 0);
 					screenModel.setCurrentCharset((byte) 0);
-					
+
 					p = (p + 1) % bufLen;
 				}
 			} else if (b == ORDER_SFE) {
 				if (i < data.length) {
 					int count = data[i++] & 0xFF;
 					byte a = 0, col = 0, hl = 0, cs = 0;
-					
+
 					// SFE resets currents logic? Usually yes for the field.
 					screenModel.setCurrentColor((byte) 0);
 					screenModel.setCurrentHighlight((byte) 0);
 					screenModel.setCurrentCharset((byte) 0);
 
 					for (int k = 0; k < count; k++) {
-						if (i + 1 >= data.length) break;
+						if (i + 1 >= data.length)
+							break;
 						int t = data[i++] & 0xFF;
 						int v = data[i++] & 0xFF;
-						
-						if (t == ATTR_FIELD || t == 0xC0) a = (byte) v;
-						else if (t == ATTR_FOREGROUND) col = normalizeColor((byte) v);
-						else if (t == ATTR_HIGHLIGHTING) hl = (byte) v;
-						else if (t == ATTR_CHAR_SET) cs = (byte) v; // Capture Charset
+
+						if (t == ATTR_FIELD || t == 0xC0)
+							a = (byte) v;
+						else if (t == ATTR_FOREGROUND)
+							col = normalizeColor((byte) v);
+						else if (t == ATTR_HIGHLIGHTING)
+							hl = (byte) v;
+						else if (t == ATTR_CHAR_SET)
+							cs = (byte) v; // Capture Charset
 					}
-					
+
 					screenModel.setChar(p, ' ');
 					screenModel.setAttr(p, a);
 					screenModel.setExtendedColor(p, col);
@@ -1093,9 +1206,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 					screenModel.setCharset(p, cs);
 
 					// Propagate SFE attributes to subsequent text
-					if (col != 0) screenModel.setCurrentColor(col);
-					if (hl != 0) screenModel.setCurrentHighlight(hl);
-					if (cs != 0) screenModel.setCurrentCharset(cs);
+					if (col != 0)
+						screenModel.setCurrentColor(col);
+					if (hl != 0)
+						screenModel.setCurrentHighlight(hl);
+					if (cs != 0)
+						screenModel.setCurrentCharset(cs);
 
 					p = (p + 1) % bufLen;
 				}
@@ -1107,16 +1223,19 @@ public class TN3270Session extends JPanel implements KeyListener {
 			} else if (b == ORDER_IC) {
 				screenModel.setCursorPos(p);
 			} else if (b == ORDER_PT) { // Program Tab (0x05)
-                // Advance to next unprotected field, or insert nulls if in field?
-                // Standard: Advance to first char of next unprotected field.
-                // Simplified implementation:
-                int start = p;
-                while (true) {
-                    p = (p + 1) % bufLen;
-                    if (screenModel.isFieldStart(p)) continue;
-                    if (!screenModel.isProtected(p)) break; // Found unprotected
-                    if (p == start) break; // Loop safety
-                }
+				// Advance to next unprotected field, or insert nulls if in field?
+				// Standard: Advance to first char of next unprotected field.
+				// Simplified implementation:
+				int start = p;
+				while (true) {
+					p = (p + 1) % bufLen;
+					if (screenModel.isFieldStart(p))
+						continue;
+					if (!screenModel.isProtected(p))
+						break; // Found unprotected
+					if (p == start)
+						break; // Loop safety
+				}
 			} else if (b == ORDER_RA) {
 				if (i + 2 < data.length) {
 					int end = decode3270Address(data[i], data[i + 1]);
@@ -1128,7 +1247,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 					// The attributes (Color/Charset) applied are the CURRENT ones.
 					c = fetchDisplayChar(data, idx); // Checks for GE
 					i = idx[0];
-					
+
 					while (p != end) {
 						screenModel.setChar(p, c);
 						screenModel.setAttr(p, (byte) 0);
@@ -1154,7 +1273,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 								screenModel.setChar(k, '\0');
 								screenModel.setExtendedColor(k, (byte) 0);
 								screenModel.setHighlight(k, (byte) 0);
-								//screenModel.setCharset(p, (byte) 0);   // We probably need this
+								// screenModel.setCharset(p, (byte) 0); // We probably need this
 							}
 						}
 					} else {
@@ -1163,7 +1282,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 								screenModel.setChar(p, '\0');
 								screenModel.setExtendedColor(p, (byte) 0);
 								screenModel.setHighlight(p, (byte) 0);
-								//screenModel.setCharset(p, (byte) 0);     // We probably need this
+								// screenModel.setCharset(p, (byte) 0); // We probably need this
 							}
 							p = (p + 1) % bufLen;
 						}
@@ -1173,7 +1292,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				if (i + 1 < data.length) {
 					int t = data[i++] & 0xFF;
 					byte v = data[i++];
-					
+
 					if (t == ATTR_FOREGROUND)
 						screenModel.setCurrentColor(normalizeColor(v));
 					else if (t == ATTR_HIGHLIGHTING)
@@ -1191,207 +1310,62 @@ public class TN3270Session extends JPanel implements KeyListener {
 				// Graphic Escape (0x08) - Single Character Override
 				if (i < data.length) {
 					byte val = data[i++];
-					
-                    // STRATEGY: Store the raw EBCDIC->ASCII mapping (Pipe |).
-                    // We do NOT use the EBCDIC_TO_APL table here if it returns Unicode box chars.
-                    // We want to store simple '|' (0x7C).
-                    
-                    if ((val & 0xFF) == 0x4F) {
-                        c = '|'; 
-                    } else {
-                    	c = EBCDIC_TO_APL[val & 0xFF];
-                    }
-					
+
+					// STRATEGY: Store the raw EBCDIC->ASCII mapping (Pipe |).
+					// We do NOT use the EBCDIC_TO_APL table here if it returns Unicode box chars.
+					// We want to store simple '|' (0x7C).
+
+					if ((val & 0xFF) == 0x4F) {
+						c = '|';
+					} else {
+						c = EBCDIC_TO_APL[val & 0xFF];
+					}
+
 					screenModel.setChar(p, c);
 					screenModel.setAttr(p, (byte) 0);
 					screenModel.setExtendedColor(p, screenModel.getCurrentColor());
 					screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 					screenModel.setCharset(p, CHARSET_APL);
-					
+
 					//
 					// Sadly, CMS PIPELINES does not use GE for the vertical bar characters,
-					// so it's difficult to force them to display "taller" than usual.  For
+					// so it's difficult to force them to display "taller" than usual. For
 					// now, we just let them be.
 					//
-					
+
 					p = (p + 1) % bufLen;
 				}
 			} else {
 				// Standard Character
 				byte currentCS = screenModel.getCurrentCharset();
-				
-                // Even if we are in APL mode (currentCS == APL), 
-                // if the byte is 0x4F, store it as '|'.
-                if ((b & 0xFF) == 0x4F) {
-                    c = '|';
-                } else {
-                	if (currentCS == CHARSET_APL) {
+
+				// Even if we are in APL mode (currentCS == APL),
+				// if the byte is 0x4F, store it as '|'.
+				if ((b & 0xFF) == 0x4F) {
+					c = '|';
+				} else {
+					if (currentCS == CHARSET_APL) {
 						// Use APL Table
 						c = EBCDIC_TO_APL[b & 0xFF];
 					} else {
 						// Use Standard Table
 						c = EBCDIC_TO_ASCII[b & 0xFF];
-						if (c == '\0') c = ' ';
+						if (c == '\0')
+							c = ' ';
 					}
-                }
-				
+				}
+
 				screenModel.setChar(p, c);
 				screenModel.setAttr(p, (byte) 0);
 				screenModel.setExtendedColor(p, screenModel.getCurrentColor());
 				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 				screenModel.setCharset(p, currentCS);
-				
+
 				p = (p + 1) % bufLen;
 			}
 		}
 	}
-	
-/*
-	private void processOrders(byte[] data, int offset) {
-		int p = 0, i = offset;
-		int[] idx = { 0 };
-		char c;
-		int bufLen = screenModel.getSize();
-		while (i < data.length) {
-			// byte b = data[i++];
-			// FIX: Mask order code
-			int b = data[i++] & 0xFF;
-			if (b == ORDER_SF) {
-				if (i < data.length) {
-					screenModel.setAttr(p, data[i++]);
-					screenModel.setChar(p, ' ');
-					screenModel.setExtendedColor(p, (byte) 0);
-					screenModel.setHighlight(p, (byte) 0);
-					screenModel.setCurrentColor((byte) 0);
-					screenModel.setCurrentHighlight((byte) 0);
-					p = (p + 1) % bufLen;
-				}
-			} else if (b == ORDER_SFE) {
-				if (i < data.length) {
-					int count = data[i++] & 0xFF;
-					byte a = 0, col = 0, hl = 0;
-					screenModel.setCurrentColor((byte) 0);
-					screenModel.setCurrentHighlight((byte) 0);
-					for (int k = 0; k < count; k++) {
-						if (i + 1 >= data.length)
-							break;
-						// byte t = data[i++], v = data[i++];
-						// if (t == ATTR_FIELD || t == 0xC0)
-						int t = data[i++] & 0xFF; // Convert to positive integer
-						int v = data[i++] & 0xFF; // Good practice to mask value too
-						if (t == ATTR_FIELD || t == 0xC0)
-							a = (byte) v;
-						else if (t == ATTR_FOREGROUND)
-							col = normalizeColor((byte) v);
-						else if (t == ATTR_HIGHLIGHTING)
-							hl = (byte) v;
-					}
-					screenModel.setChar(p, ' ');
-					screenModel.setAttr(p, a);
-					screenModel.setExtendedColor(p, col);
-					screenModel.setHighlight(p, hl);
 
-					// FIX: Propagate these attributes to the text that follows!
-					// Without this, the text "RUNNING" uses the default (0) attributes.
-					if (col != 0)
-						screenModel.setCurrentColor(col);
-					if (hl != 0)
-						screenModel.setCurrentHighlight(hl);
-
-					p = (p + 1) % bufLen;
-				}
-			} else if (b == ORDER_SBA) {
-				if (i + 1 < data.length) {
-					p = decode3270Address(data[i], data[i + 1]);
-					i += 2;
-				}
-			} else if (b == ORDER_IC) {
-				screenModel.setCursorPos(p);
-				if (screenModel.isFieldStart(p))
-					screenModel.setCursorPos((p + 1) % bufLen);
-			} else if (b == ORDER_RA) {
-				if (i + 2 < data.length) {
-					int end = decode3270Address(data[i], data[i + 1]);
-					idx[0] = i + 2;
-					c = fetchDisplayChar(data, idx);
-					i = idx[0];
-					while (p != end) {
-						screenModel.setChar(p, c);
-						screenModel.setAttr(p, (byte) 0);
-						screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-						screenModel.setHighlight(p, screenModel.getCurrentHighlight());
-						p = (p + 1) % bufLen;
-					}
-				}
-			} else if (b == ORDER_EUA) {
-				if (i + 1 < data.length) {
-					int end = decode3270Address(data[i], data[i + 1]);
-					i += 2;
-					if (p == end) {
-						for (int k = 0; k < bufLen; k++) {
-							if (!screenModel.isProtected(k) && !screenModel.isFieldStart(k)) {
-								screenModel.setChar(k, '\0');
-								screenModel.setExtendedColor(k, (byte) 0);
-								screenModel.setHighlight(k, (byte) 0);
-							}
-						}
-					} else {
-						while (p != end) {
-							if (!screenModel.isProtected(p) && !screenModel.isFieldStart(p)) {
-								screenModel.setChar(p, '\0');
-								screenModel.setExtendedColor(p, (byte) 0);
-								screenModel.setHighlight(p, (byte) 0);
-							}
-							p = (p + 1) % bufLen;
-						}
-					}
-				}
-			} else if (b == ORDER_GE) {
-				idx[0] = i - 1;
-				c = fetchDisplayChar(data, idx);
-				i = idx[0];
-				screenModel.setChar(p, c);
-				screenModel.setAttr(p, (byte) 0);
-				screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
-				p = (p + 1) % bufLen;
-			} else if (b == ORDER_PT) {
-				for (int k = 0; k < screenModel.getSize(); k++) {
-					if (screenModel.isFieldStart(p) && !screenModel.isProtected(p)) {
-						p = (p + 1) % bufLen;
-						break;
-					}
-					p = (p + 1) % bufLen;
-				}
-			} else if (b == ORDER_SA) {
-				if (i + 1 < data.length) {
-					// byte t = data[i++], v = data[i++];
-					int t = data[i++] & 0xFF; // Fix SA Type
-					byte v = data[i++];
-					if (t == ATTR_FOREGROUND)
-						screenModel.setCurrentColor(normalizeColor(v));
-					else if (t == ATTR_HIGHLIGHTING)
-						screenModel.setCurrentHighlight(v);
-					else if (t == ATTR_CHAR_SET)
-						screenModel.setCurrentCharset(v); // Handle SA Type 0x43
-					else if (t == 0x00) {
-						screenModel.setCurrentColor((byte) 0);
-						screenModel.setCurrentHighlight((byte) 0);
-					}
-				}
-			} else {
-				c = EBCDIC_TO_ASCII[b & 0xFF];
-				if (c == '\0')
-					c = ' ';
-				screenModel.setChar(p, c);
-				screenModel.setAttr(p, (byte) 0);
-				screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
-				p = (p + 1) % bufLen;
-			}
-		}
-	}
-*/
 	private byte normalizeColor(byte raw) {
 		if (raw >= (byte) 0xF1 && raw <= (byte) 0xF7)
 			return (byte) (raw - 0xF0);
@@ -1437,9 +1411,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 						// Calculate count: Basic(1) + Color?(1) + Highlight?(1)
 						int count = 1;
-						if (c != 0) count++;
-						if (h != 0) count++;
-						if (cs != 0) count++; // Add Charset count
+						if (c != 0)
+							count++;
+						if (h != 0)
+							count++;
+						if (cs != 0)
+							count++; // Add Charset count
 						baos.write(count);
 
 						// 1. Basic Attribute (Type 0xC0)
@@ -1457,12 +1434,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 							baos.write(ATTR_HIGHLIGHTING);
 							baos.write(h);
 						}
-						
-                        // 4. Character Set (Type 0x43)
-                        if (cs != 0) {
-                            baos.write(ATTR_CHAR_SET);
-                            baos.write(cs);
-                        }
+
+						// 4. Character Set (Type 0x43)
+						if (cs != 0) {
+							baos.write(ATTR_CHAR_SET);
+							baos.write(cs);
+						}
 					} else {
 						// --- STANDARD MODE: Use SF (0x1D) ---
 						baos.write(ORDER_SF);
@@ -1490,14 +1467,14 @@ public class TN3270Session extends JPanel implements KeyListener {
 							baos.write(h);
 							runningHighlight = h;
 						}
-						
-                        // FIX: Preserve Character Set changes (e.g. APL)
-                        if (cs != runningCharset) {
-                            baos.write(ORDER_SA);
-                            baos.write(ATTR_CHAR_SET); // 0x43
-                            baos.write(cs);
-                            runningCharset = cs;
-                        }
+
+						// FIX: Preserve Character Set changes (e.g. APL)
+						if (cs != runningCharset) {
+							baos.write(ORDER_SA);
+							baos.write(ATTR_CHAR_SET); // 0x43
+							baos.write(cs);
+							runningCharset = cs;
+						}
 					}
 
 					// Write the character
@@ -1505,33 +1482,34 @@ public class TN3270Session extends JPanel implements KeyListener {
 					byte ebcdicByte = 0;
 					byte cs = charsets[i];
 					/*
-					if (ch == '\0')
-						baos.write(0x00);
-					else if (ch < 256 && ASCII_TO_EBCDIC[ch] != 0)
-						baos.write(ASCII_TO_EBCDIC[ch]);
+					 * if (ch == '\0') baos.write(0x00); else if (ch < 256 && ASCII_TO_EBCDIC[ch] !=
+					 * 0) baos.write(ASCII_TO_EBCDIC[ch]); else baos.write(0x40);
+					 */
+					if (cs == CHARSET_APL) {
+						// Reverse lookup in EBCDIC_TO_APL table
+						// (Optimization: You could build a reverse map static array for speed)
+						// (But, why waste 64k on a mostly empty table?)
+						for (int k = 0; k < 256; k++) {
+							if (EBCDIC_TO_APL[k] == ch) {
+								ebcdicByte = (byte) k;
+								break;
+							}
+						}
+						// ebcdicByte = EBCDIC.APL_TO_EBCDIC[ch];
+						if (ebcdicByte == 0)
+							ebcdicByte = (byte) 0x40; // Fallback
+					} else {
+						// Standard ASCII/Unicode -> EBCDIC
+						if (ch < 256)
+							ebcdicByte = ASCII_TO_EBCDIC[ch];
+						else
+							ebcdicByte = (byte) 0x40; // Unknown
+					}
+
+					if (ebcdicByte != 0)
+						baos.write(ebcdicByte);
 					else
-						baos.write(0x40);
-					*/
-                    if (cs == CHARSET_APL) {
-                        // Reverse lookup in EBCDIC_TO_APL table
-                        // (Optimization: You could build a reverse map static array for speed)
-                    	// (But, why waste 64k on a mostly empty table?)
-                        for (int k=0; k<256; k++) {
-                            if (EBCDIC_TO_APL[k] == ch) {
-                                ebcdicByte = (byte) k;
-                                break;
-                            }
-                        }
-                        //ebcdicByte = EBCDIC.APL_TO_EBCDIC[ch];
-                        if (ebcdicByte == 0) ebcdicByte = (byte) 0x40; // Fallback
-                    } else {
-                        // Standard ASCII/Unicode -> EBCDIC
-                        if (ch < 256) ebcdicByte = ASCII_TO_EBCDIC[ch];
-                        else ebcdicByte = (byte) 0x40; // Unknown
-                    }
-                    
-                    if (ebcdicByte != 0) baos.write(ebcdicByte);
-                    else baos.write(0x00); // Nulls are 0x00
+						baos.write(0x00); // Nulls are 0x00
 				}
 			}
 
@@ -1543,7 +1521,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void sendAID(int aid) {
 		lastAID = aid;
 		int cPos = screenModel.getCursorPos();
@@ -1564,7 +1542,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			if (isReadMod) {
 				if (aid == AID_ENTER || (aid >= AID_PF1 && aid <= AID_PF24)) {
 					int screenSize = screenModel.getSize();
-					
+
 					// --- FIX: Detect Formatted vs Unformatted Screen ---
 					boolean isFormatted = false;
 					for (int i = 0; i < screenSize; i++) {
@@ -1588,8 +1566,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 								while (dataStart < end && screenModel.getChar(dataStart) == '\0')
 									dataStart++;
 								int dataEnd = end - 1;
-								while (dataEnd > fieldStart
-										&& (screenModel.getChar(dataEnd) == '\0' || screenModel.getChar(dataEnd) == ' '))
+								while (dataEnd > fieldStart && (screenModel.getChar(dataEnd) == '\0'))
+									// Fix: Don't trim spaces: || screenModel.getChar(dataEnd) == ' '))
 									dataEnd--;
 
 								if (dataStart <= dataEnd) {
@@ -1615,7 +1593,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 					} else {
 						// --- NEW LOGIC: Unformatted Screen (Raw Buffer) ---
 						// If the screen was cleared (e.g. by AID_CLEAR), there are no fields.
-						// We must send the raw buffer contents (excluding nulls) to satisfy hosts 
+						// We must send the raw buffer contents (excluding nulls) to satisfy hosts
 						// like z/VM that expect data packets for console input.
 						for (int i = 0; i < screenSize; i++) {
 							char c = screenModel.getChar(i);
@@ -1657,15 +1635,18 @@ public class TN3270Session extends JPanel implements KeyListener {
 			int length = ((data[i] & 0xFF) << 8) | (data[i + 1] & 0xFF);
 			if (length < 3 || i + length > data.length)
 				break;
-			// byte sfid = data[i + 2];
+
 			int sfid = data[i + 2] & 0xFF;
 			if (sfid == 0x01) {
 				if (i + 4 < data.length)
 					sendQueryResponse();
 			} else if (sfid == SFID_DATA_CHAIN)
 				handleDataChain(data, i, length);
-			else if (sfid == SF_ID_SET_REPLY_MODE)
+			else if (sfid == SFID_SET_REPLY_MODE)
 				handleSetReplyModeSF(data, i, length);
+			else if (sfid == SFID_DEST_ORIGIN)
+				handleServiceRequest(data, i, length);
+
 			i += length;
 		}
 	}
@@ -1699,6 +1680,282 @@ public class TN3270Session extends JPanel implements KeyListener {
 		replyModeFlags = 0;
 	}
 
+	/**
+	 * Handles inbound Destination/Origin requests (Host -> PC). Dispatches based on
+	 * Keywords: "AI", "EMU", "CLIP", etc.
+	 */
+	private void handleServiceRequest(byte[] data, int offset, int length) {
+		if (length < 8)
+			return;
+
+		// 1. Extract the Target ID
+		int targetID = ((data[offset + 6] & 0xFF) << 8) | (data[offset + 7] & 0xFF);
+
+		if (targetID == AI_SERVICE_ID) {
+			// 2. Extract Payload (EBCDIC -> ASCII String)
+			int payloadLen = length - 8;
+			if (payloadLen <= 0)
+				return;
+
+			StringBuilder sb = new StringBuilder();
+			for (int k = 0; k < payloadLen; k++) {
+				int ebcdicChar = data[offset + 8 + k] & 0xFF;
+				char c = EBCDIC_TO_ASCII[ebcdicChar];
+				sb.append(c != '\0' ? c : ' ');
+			}
+
+			String rawRequest = sb.toString().trim();
+
+			// 3. Dispatch Logic
+			// Format: KEYWORD <SPACE> DATA
+			String[] parts = rawRequest.split("\\s+", 2);
+			String keyword = parts[0].toUpperCase();
+			String params = (parts.length > 1) ? parts[1] : "";
+
+			switch (keyword) {
+			case "AI":
+				// Run AI tasks in a background thread (Slow)
+				handleAIRequest(targetID, params);
+				break;
+
+			case "EMU":
+				// Run Emulator commands immediately (Fast)
+				handleEmulatorCommand(targetID, params);
+				break;
+
+			case "PING":
+				sendBridgeResponse(targetID, "PONG");
+				break;
+
+			default:
+				sendBridgeResponse(targetID, "ERR: Unknown Keyword '" + keyword + "'. Supported: AI, EMU, PING");
+				break;
+			}
+		}
+	}
+
+	/**
+	 * Handles "AI <Prompt>" requests asynchronously.
+	 */
+	private void handleAIRequest(int targetID, String prompt) {
+		if (prompt.isEmpty()) {
+			sendBridgeResponse(targetID, "ERR: AI prompt cannot be empty.");
+			return;
+		}
+
+		new Thread(() -> {
+			String responseText;
+			try {
+				// Call the existing AIManager
+				responseText = com.tn3270.ai.AIManager.getInstance().ask(prompt);
+				if (responseText == null)
+					responseText = "ERR: No response from AI provider.";
+			} catch (Exception e) {
+				responseText = "ERR: AI Exception - " + e.getMessage();
+			}
+			sendBridgeResponse(targetID, responseText);
+		}).start();
+	}
+
+	/**
+	 * Handles "EMU <Command>" requests synchronously.
+	 */
+	private void handleEmulatorCommand(int targetID, String command) {
+		String response;
+		String cmdUpper = command.toUpperCase();
+
+		switch (cmdUpper) {
+		case "GET_VERSION":
+			response = "TN3270-AI Emulator v1.0.0 (Java)";
+			break;
+
+		case "GET_CURSOR":
+			int pos = screenModel.getCursorPos();
+			int row = pos / screenModel.getCols();
+			int col = pos % screenModel.getCols();
+			response = "ROW=" + row + " COL=" + col;
+			break;
+
+		case "GET_SCREEN_SIZE":
+			response = screenModel.getRows() + "x" + screenModel.getCols();
+			break;
+
+		case "BEEP":
+			java.awt.Toolkit.getDefaultToolkit().beep();
+			response = "OK";
+			break;
+
+		case "COPY_CLIPBOARD":
+			// Example: Host tells emulator to copy current selection to system clipboard
+			copySelection();
+			response = "OK: Selection copied";
+			break;
+
+		default:
+			response = "ERR: Unknown EMU command '" + command + "'";
+			break;
+		}
+		sendBridgeResponse(targetID, response);
+	}
+
+	private void sendBridgeResponse(int serviceID, String text) {
+		try {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+			byte[] asciiBytes = text.getBytes(StandardCharsets.UTF_8);
+			int totalLen = 8 + asciiBytes.length;
+
+			// Length
+			baos.write((totalLen >> 8) & 0xFF);
+			baos.write(totalLen & 0xFF);
+
+			// SFID (0x0F) + Type (0x02)
+			baos.write(SFID_DEST_ORIGIN);
+			baos.write(0x02);
+
+			// INCTRL (0x00 for inbound) + Reserved
+			baos.write(0x00);
+			baos.write(0x00);
+
+			// ID (Echo back the ID)
+			baos.write((serviceID >> 8) & 0xFF);
+			baos.write(serviceID & 0xFF);
+
+			// Data (ASCII -> EBCDIC)
+			for (byte b : asciiBytes) {
+				char c = (char) b;
+				if (c < 256 && ASCII_TO_EBCDIC[c] != 0) {
+					baos.write(ASCII_TO_EBCDIC[c]);
+				} else {
+					baos.write(0x40);
+				}
+			}
+
+			sendStructuredFieldResponse(baos.toByteArray());
+		} catch (IOException e) {
+			logger.severe("Failed to send Bridge response: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Handles inbound Destination/Origin Structured Fields (Host -> PC). Checks if
+	 * the ID matches our AI Service and processes the prompt.
+	 */
+	private void handleAiServiceRequest(byte[] data, int offset, int length) {
+		// Structure per Appendix B, Page B-9:
+		// Offset 0-1: Length
+		// Offset 2: SFID (0x0F)
+		// Offset 3: Subtype (0x02) - Implied by PDF X'0F02' header description
+		// Offset 4: INCTRL (Flags)
+		// Offset 5: Reserved
+		// Offset 6-7: Destination/Origin ID
+		// Offset 8+: Data
+
+		if (length < 8)
+			return;
+
+		// 1. Extract the Target ID (Bytes 6 and 7)
+		int targetID = ((data[offset + 6] & 0xFF) << 8) | (data[offset + 7] & 0xFF);
+
+		// 2. Check if it matches our advertised AI Service ID
+		if (targetID == AI_SERVICE_ID) {
+
+			// 3. Extract the Prompt (Payload)
+			// Payload starts at offset + 8
+			int payloadLen = length - 8;
+			if (payloadLen > 0) {
+				StringBuilder promptBuilder = new StringBuilder();
+				for (int k = 0; k < payloadLen; k++) {
+					// Read EBCDIC byte
+					int ebcdicChar = data[offset + 8 + k] & 0xFF;
+					// Convert to ASCII
+					char c = EBCDIC_TO_ASCII[ebcdicChar];
+					// Handle nulls/unmapped chars if necessary, usually just append
+					if (c != '\0')
+						promptBuilder.append(c);
+					else
+						promptBuilder.append(' ');
+				}
+
+				String prompt = promptBuilder.toString().trim();
+
+				// 4. Call the AI Service
+				// We run this in a separate thread to avoid blocking the ReaderThread
+				// (though for FULLSCR blocking requests, the host is waiting anyway).
+				new Thread(() -> {
+					String responseText;
+					try {
+						// Call your AIManager.
+						// Assuming AIManager has a method 'ask' or 'processRequest'.
+						// If your AIManager is UI-based, you might need a headless method.
+						responseText = AIManager.getInstance().ask(prompt);
+
+						if (responseText == null)
+							responseText = "Error: No response from AI.";
+
+					} catch (Exception e) {
+						responseText = "Error processing AI request: " + e.getMessage();
+					}
+
+					// 5. Send the Response back to the Host
+					sendAiResponse(targetID, responseText);
+				}).start();
+			}
+		}
+	}
+
+	/**
+	 * Sends a Destination/Origin Structured Field Response (PC -> Host).
+	 * Encapsulates the text in EBCDIC and wraps it in the correct SF headers.
+	 */
+	private void sendAiResponse(int serviceID, String text) {
+		try {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+			// --- Build the Structured Field Content ---
+
+			// Calculate total length:
+			// Header = 8 bytes (Len(2) + SFID(1) + Type(1) + Flags(2) + ID(2))
+			// Payload = text length
+			byte[] asciiBytes = text.getBytes(StandardCharsets.UTF_8);
+			int totalLen = 8 + asciiBytes.length;
+
+			// 1. Length (2 bytes)
+			baos.write((totalLen >> 8) & 0xFF);
+			baos.write(totalLen & 0xFF);
+
+			// 2. SFID (0x0F) and Type (0x02)
+			baos.write(SFID_DEST_ORIGIN);
+			baos.write(0x02);
+
+			// 3. Flags (2 bytes)
+			// INCTRL applies to outbound (Host->PC), so we send 0x00 for inbound.
+			baos.write(0x00);
+			baos.write(0x00);
+
+			// 4. Origin ID (2 bytes) - Echoing back our ID
+			baos.write((serviceID >> 8) & 0xFF);
+			baos.write(serviceID & 0xFF);
+
+			// 5. Data (Convert ASCII String to EBCDIC)
+			for (byte b : asciiBytes) {
+				char c = (char) b;
+				if (c < 256 && ASCII_TO_EBCDIC[c] != 0) {
+					baos.write(ASCII_TO_EBCDIC[c]);
+				} else {
+					baos.write(0x40); // Space/Unknown
+				}
+			}
+
+			// --- Send Packet ---
+			// sendStructuredFieldResponse wraps this data in AID 0x88 (SF) + IAC/EOR
+			sendStructuredFieldResponse(baos.toByteArray());
+
+		} catch (IOException e) {
+			logger.severe("Failed to send AI response: " + e.getMessage());
+		}
+	}
+
 	private void sendQueryResponse() {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -1718,18 +1975,29 @@ public class TN3270Session extends JPanel implements KeyListener {
 					(byte) 0xF6, (byte) 0xF7, (byte) 0xF7, 0x00, 0x0D, (byte) 0x81, (byte) 0x87, 0x04, 0x00,
 					(byte) 0xF0, (byte) 0xF1, (byte) 0xF1, (byte) 0xF2, (byte) 0xF2, (byte) 0xF4, (byte) 0xF4, 0x00,
 					0x07, (byte) 0x81, (byte) 0x88, 0x00, 0x01, 0x02, 0x00, 0x07, (byte) 0x81, (byte) 0x8C, 0x00, 0x00,
-					0x00, 0x00, 0x0C, (byte) 0x81, (byte) 0x95, 0x00, 0x00, 0x09, (byte) 0xC4, 0x09, (byte) 0xC4, 0x01,
-					0x01, 0x00, 0x06, (byte) 0x81, (byte) 0x99, 0x00, 0x00, 0x00, 0x11, (byte) 0x81, (byte) 0xA6, 0x00,
-					0x00, 0x0B, 0x01, 0x00, (byte) ((c >> 8) & 0xFF), (byte) (c & 0xFF), 0x00, 0x18,
-					(byte) ((c >> 8) & 0xFF), (byte) (c & 0xFF), (byte) ((r >> 8) & 0xFF), (byte) (r & 0xFF), 0x00,
-					0x1A, (byte) 0x81, (byte) 0x8F, 0x00, 0x00, (byte) 0xA3, (byte) 0x95, (byte) 0xF3, (byte) 0xF2,
-					(byte) 0xF7, (byte) 0xF0, 0x40, 0x40, (byte) 0xC3, (byte) 0x93, (byte) 0x81, (byte) 0xA4,
-					(byte) 0x84, (byte) 0x85, (byte) 0xC1, (byte) 0xC9, 0x04, 0x01, 0x00, (byte) 0xAE, 0x00, 0x19,
-					(byte) 0x81, (byte) 0x9D, 0x00, 0x01, 0x0E, 0x00, 0x0E, 0x00, 0x0F, 0x00, (byte) 0xAE, (byte) 0xC3,
-					(byte) 0x93, (byte) 0x81, (byte) 0xA4, (byte) 0x84, (byte) 0x85, 0x61, (byte) 0xC1, (byte) 0xC9,
-					0x40, 0x40, 0x40, 0x00, 0x09, (byte) 0x81, (byte) 0xA8, 0x02, 0x00, (byte) 0xF0, (byte) 0xFF,
-					(byte) 0xFF, 0x00, 0x11, (byte) 0x81, (byte) 0xAB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
-					0x00, 0x04, 0x01, 0x00, 0x01 });
+					0x00, 0x00, 0x0C,
+					// DDM (Distributed Data Management) Query Reply
+					// 0 1 word Length Length of structure
+					// 2 1 byte X'81' Query reply ID
+					// 3 1 byte X'95' Query reply type
+					// 4–5 2 bytes FLAGS Reserved
+					// 6–7 2 bytes LIMIN Maximum DDM bytes allowed in inbound transmission
+					// 8–9 2 bytes LIMOUT Maximum DDM bytes allowed in outbound transmission
+					// 10 1 byte NSS Number of subsets identifier
+					// 11 1 byte DDMSS DDM subset identifier
+					//
+					(byte) 0x81, (byte) 0x95, 0x00, 0x00, 0x09, (byte) 0xC4, 0x09, (byte) 0xC4, 0x01, 0x01, 0x00, 0x06,
+					(byte) 0x81, (byte) 0x99, 0x00, 0x00, 0x00, 0x11, (byte) 0x81, (byte) 0xA6, 0x00, 0x00, 0x0B, 0x01,
+					0x00, (byte) ((c >> 8) & 0xFF), (byte) (c & 0xFF), 0x00, 0x18, (byte) ((c >> 8) & 0xFF),
+					(byte) (c & 0xFF), (byte) ((r >> 8) & 0xFF), (byte) (r & 0xFF), 0x00, 0x1A, (byte) 0x81,
+					(byte) 0x8F, 0x00, 0x00, (byte) 0xA3, (byte) 0x95, (byte) 0xF3, (byte) 0xF2, (byte) 0xF7,
+					(byte) 0xF0, 0x40, 0x40, (byte) 0xC3, (byte) 0x93, (byte) 0x81, (byte) 0xA4, (byte) 0x84,
+					(byte) 0x85, (byte) 0xC1, (byte) 0xC9, 0x04, 0x01, 0x00, (byte) 0xAE, 0x00, 0x19, (byte) 0x81,
+					(byte) 0x9D, 0x00, 0x01, 0x0E, 0x00, 0x0E, 0x00, 0x0F, 0x00, (byte) 0xAE, (byte) 0xC3, (byte) 0x93,
+					(byte) 0x81, (byte) 0xA4, (byte) 0x84, (byte) 0x85, 0x61, (byte) 0xC1, (byte) 0xC9, 0x40, 0x40,
+					0x40, 0x00, 0x09, (byte) 0x81, (byte) 0xA8, 0x02, 0x00, (byte) 0xF0, (byte) 0xFF, (byte) 0xFF, 0x00,
+					0x11, (byte) 0x81, (byte) 0xAB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x04, 0x01,
+					0x00, 0x01 });
 			sendStructuredFieldResponse(baos.toByteArray());
 		} catch (IOException e) {
 		}
@@ -1807,7 +2075,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		}
 		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
 		dialog.setLayout(new BorderLayout());
-		
+
 		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
 		JButton cancelBtn = new JButton("Cancel");
@@ -1821,18 +2089,24 @@ public class TN3270Session extends JPanel implements KeyListener {
 		gbc.fill = GridBagConstraints.HORIZONTAL;
 		gbc.anchor = GridBagConstraints.WEST;
 
-		gbc.gridx = 0; gbc.gridy = 0;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
 		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
+		gbc.gridx = 1;
+		gbc.gridwidth = 2;
 		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
 		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
 		mainPanel.add(hostTypeBox, gbc);
 
-		gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3;
+		gbc.gridx = 0;
+		gbc.gridy = 1;
+		gbc.gridwidth = 3;
 		JCheckBox useClipboardCheck = new JCheckBox("Transfer to/from Clipboard (Text Only)");
 		mainPanel.add(useClipboardCheck, gbc);
 
-		gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+		gbc.gridx = 0;
+		gbc.gridy = 2;
+		gbc.gridwidth = 1;
 		JLabel fileLabel = new JLabel("Local File:");
 		mainPanel.add(fileLabel, gbc);
 		gbc.gridx = 1;
@@ -1842,21 +2116,28 @@ public class TN3270Session extends JPanel implements KeyListener {
 		JButton browseBtn = new JButton("Browse...");
 		mainPanel.add(browseBtn, gbc);
 
-		gbc.gridx = 0; gbc.gridy = 3;
+		gbc.gridx = 0;
+		gbc.gridy = 3;
 		JLabel datasetLabel = new JLabel("Host Dataset:");
 		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
+		gbc.gridx = 1;
+		gbc.gridwidth = 2;
 		JTextField hostDatasetField = new JTextField(30);
 		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
 		mainPanel.add(hostDatasetField, gbc);
 
-		gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
+		gbc.gridx = 0;
+		gbc.gridy = 4;
+		gbc.gridwidth = 1;
 		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
+		gbc.gridx = 1;
+		gbc.gridwidth = 2;
 		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
 		mainPanel.add(modeBox, gbc);
 
-		gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 3;
+		gbc.gridx = 0;
+		gbc.gridy = 5;
+		gbc.gridwidth = 3;
 		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
 		JCheckBox appendCheck = new JCheckBox("Append", false);
@@ -1871,8 +2152,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 		GridBagConstraints agbc = new GridBagConstraints();
 		agbc.insets = new Insets(2, 5, 2, 5);
 		agbc.fill = GridBagConstraints.HORIZONTAL;
-		
-		agbc.gridx = 0; agbc.gridy = 0;
+
+		agbc.gridx = 0;
+		agbc.gridy = 0;
 		allocPanel.add(new JLabel("RECFM:"), agbc);
 		agbc.gridx = 1;
 		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
@@ -1882,8 +2164,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 		agbc.gridx = 3;
 		JTextField lreclField = new JTextField("", 5);
 		allocPanel.add(lreclField, agbc);
-		
-		agbc.gridx = 0; agbc.gridy = 1;
+
+		agbc.gridx = 0;
+		agbc.gridy = 1;
 		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
 		agbc.gridx = 1;
 		JTextField blksizeField = new JTextField("", 6);
@@ -1894,7 +2177,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		agbc.gridx = 3;
 		JTextField spaceField = new JTextField("", 8);
 		allocPanel.add(spaceField, agbc);
-		
+
 		mainPanel.add(allocPanel, gbc);
 
 		// LISTENERS
@@ -1904,11 +2187,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 			browseBtn.setEnabled(!useClip);
 			fileLabel.setText(useClip ? "Source/Dest:" : "Local File:");
 			localFileField.setText(useClip ? "(System Clipboard)" : "");
-			
+
 			modeBox.setEnabled(!useClip);
 			if (useClip) {
-				modeBox.setSelectedIndex(0); 
-				crlfCheck.setSelected(true); 
+				modeBox.setSelectedIndex(0);
+				crlfCheck.setSelected(true);
 				crlfCheck.setEnabled(false);
 			} else {
 				crlfCheck.setEnabled(modeBox.getSelectedIndex() == 0);
@@ -1924,12 +2207,14 @@ public class TN3270Session extends JPanel implements KeyListener {
 			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
 			spaceLabel.setVisible(tso);
 			spaceField.setVisible(tso);
-			
+
 			if (!useClipboardCheck.isSelected() && !localFileField.getText().isEmpty()) {
 				String path = localFileField.getText();
 				String name = new File(path).getName().toUpperCase();
-				if (tso) hostDatasetField.setText(name);
-				else hostDatasetField.setText(name.replace('.', ' ') + " A");
+				if (tso)
+					hostDatasetField.setText(name);
+				else
+					hostDatasetField.setText(name.replace('.', ' ') + " A");
 			}
 		});
 
@@ -1939,13 +2224,15 @@ public class TN3270Session extends JPanel implements KeyListener {
 					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
 				File f = fc.getSelectedFile();
 				localFileField.setText(f.getAbsolutePath());
-				
+
 				String name = f.getName().toUpperCase();
 				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) hostDatasetField.setText(name);
+				if (isTSO)
+					hostDatasetField.setText(name);
 				else {
 					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A")) cmsName += " A";
+					if (!cmsName.endsWith(" A"))
+						cmsName += " A";
 					hostDatasetField.setText(cmsName);
 				}
 			}
@@ -1961,15 +2248,16 @@ public class TN3270Session extends JPanel implements KeyListener {
 		transferBtn.addActionListener(e -> {
 			boolean ascii = (modeBox.getSelectedIndex() == 0);
 			boolean isClipboard = useClipboardCheck.isSelected();
-			
+
 			HostType selectedHostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
 			String dataset = hostDatasetField.getText().trim();
 
 			if (dataset.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error", JOptionPane.ERROR_MESSAGE);
+				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error",
+						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
-			
+
 			// --- AUTO-DETECT LINUX ---
 			// Priority: 1. Inferred type (if Linux) 2. Dropdown Selection
 			HostType inferredType = inferHostType(dataset);
@@ -1979,7 +2267,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			// 1. CLIPBOARD TRANSFER
 			// ============================
 			if (isClipboard) {
-				dialog.dispose(); 
+				dialog.dispose();
 
 				if (isDownload) {
 					// DOWNLOAD HOST -> CLIPBOARD
@@ -1990,46 +2278,59 @@ public class TN3270Session extends JPanel implements KeyListener {
 							// Safety check for binary garbage on clipboard
 							if (AIManager.isLikelyBinary(content)) {
 								int confirm = JOptionPane.showConfirmDialog(getParentFrame(),
-									"The file '" + dataset + "' appears to be binary.\n" +
-									"Placing this data on the Clipboard may result in garbage text.\n\n" +
-									"Proceed anyway?",
-									"Binary Detection Warning",
-									JOptionPane.YES_NO_OPTION,
-									JOptionPane.WARNING_MESSAGE);
-								if (confirm != JOptionPane.YES_OPTION) return;
+										"The file '" + dataset + "' appears to be binary.\n"
+												+ "Placing this data on the Clipboard may result in garbage text.\n\n"
+												+ "Proceed anyway?",
+										"Binary Detection Warning", JOptionPane.YES_NO_OPTION,
+										JOptionPane.WARNING_MESSAGE);
+								if (confirm != JOptionPane.YES_OPTION)
+									return;
 							}
 							try {
 								// Convert to String for Clipboard (UTF-8 assumption safe for text)
 								String text = new String(content, StandardCharsets.UTF_8);
-								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-								JOptionPane.showMessageDialog(getParentFrame(), 
+								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text),
+										null);
+								JOptionPane.showMessageDialog(getParentFrame(),
 										"Downloaded " + content.length + " bytes to Clipboard.\nFrom: " + dataset);
 							} catch (Exception ex) {
 								onError("Clipboard access failed: " + ex.getMessage());
 							}
 						}
-						public void onUploadComplete() {}
+
+						public void onUploadComplete() {
+						}
+
 						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
+							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error",
+									JOptionPane.ERROR_MESSAGE);
 						}
 					});
 				} else {
 					// UPLOAD CLIPBOARD -> HOST
 					try {
-						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-						if (text == null) text = "";
-						
+						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard()
+								.getData(DataFlavor.stringFlavor);
+						if (text == null)
+							text = "";
+
 						uploadTextToHost(text, dataset, actualHostType, new MemoryTransferCallback() {
 							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Successfully uploaded Clipboard content to " + dataset);
+								JOptionPane.showMessageDialog(getParentFrame(),
+										"Successfully uploaded Clipboard content to " + dataset);
 							}
-							public void onDownloadComplete(byte[] c) {}
+
+							public void onDownloadComplete(byte[] c) {
+							}
+
 							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
+								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error",
+										JOptionPane.ERROR_MESSAGE);
 							}
 						});
 					} catch (Exception ex) {
-						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error", JOptionPane.ERROR_MESSAGE);
+						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error",
+								JOptionPane.ERROR_MESSAGE);
 					}
 				}
 				return;
@@ -2040,7 +2341,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 			// ============================
 			String localPath = localFileField.getText().trim();
 			if (localPath.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Local File.", "Error", JOptionPane.ERROR_MESSAGE);
+				JOptionPane.showMessageDialog(dialog, "Please specify a Local File.", "Error",
+						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
 			File localFile = new File(localPath);
@@ -2055,17 +2357,24 @@ public class TN3270Session extends JPanel implements KeyListener {
 								// Write RAW BYTES (Preserves binary fidelity)
 								java.nio.file.Files.write(localFile.toPath(), content);
 								JOptionPane.showMessageDialog(getParentFrame(), "Downloaded to " + localFile.getName());
-							} catch (IOException ex) { onError("File write error: " + ex.getMessage()); }
+							} catch (IOException ex) {
+								onError("File write error: " + ex.getMessage());
+							}
 						}
-						public void onUploadComplete() {}
+
+						public void onUploadComplete() {
+						}
+
 						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
+							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error",
+									JOptionPane.ERROR_MESSAGE);
 						}
 					});
 				} else {
 					// Upload
 					if (!localFile.exists()) {
-						JOptionPane.showMessageDialog(getParentFrame(), "Local file not found.", "Error", JOptionPane.ERROR_MESSAGE);
+						JOptionPane.showMessageDialog(getParentFrame(), "Local file not found.", "Error",
+								JOptionPane.ERROR_MESSAGE);
 						return;
 					}
 					try {
@@ -2074,13 +2383,18 @@ public class TN3270Session extends JPanel implements KeyListener {
 							public void onUploadComplete() {
 								JOptionPane.showMessageDialog(getParentFrame(), "Upload Complete.");
 							}
-							public void onDownloadComplete(byte[] c) {}
+
+							public void onDownloadComplete(byte[] c) {
+							}
+
 							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
+								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error",
+										JOptionPane.ERROR_MESSAGE);
 							}
 						});
 					} catch (IOException ex) {
-						JOptionPane.showMessageDialog(getParentFrame(), "Read error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+						JOptionPane.showMessageDialog(getParentFrame(), "Read error: " + ex.getMessage(), "Error",
+								JOptionPane.ERROR_MESSAGE);
 					}
 				}
 				return;
@@ -2090,1376 +2404,31 @@ public class TN3270Session extends JPanel implements KeyListener {
 			String lrecl = lreclField.getText().trim();
 			if (!isDownload && lrecl.isEmpty() && ascii)
 				lrecl = "255";
-			
+
 			this.hostType = actualHostType; // Use the verified host type
-			
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset,
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
+
+			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset, ascii,
+					crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
 					blksizeField.getText().trim(), spaceField.getText().trim());
-			
+
 			dialog.dispose();
 			initiateFileTransfer(localPath, cmd, isDownload);
 		});
 
 		cancelBtn.addActionListener(e -> dialog.dispose());
-		
+
 		dialog.add(mainPanel, BorderLayout.CENTER);
 		dialog.add(btnPanel, BorderLayout.SOUTH);
 
 		boolean startTso = (hostTypeBox.getSelectedIndex() == 0);
 		spaceLabel.setVisible(startTso);
 		spaceField.setVisible(startTso);
-		
+
 		dialog.pack();
 		dialog.setLocationRelativeTo(getParentFrame());
 		dialog.setVisible(true);
 	}
-	
-	/*
-	public void showFileTransferDialog(boolean isDownload) {
-		if (!connected) {
-			JOptionPane.showMessageDialog(getParentFrame(), "Not connected to host.", "Connection Required",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
-		dialog.setLayout(new BorderLayout());
-		
-		// 1. Define Logic Buttons EARLY so they are in scope for listeners
-		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
-		JButton cancelBtn = new JButton("Cancel");
-		btnPanel.add(cancelBtn);
-		btnPanel.add(transferBtn);
 
-		// 2. Layout Main Panel
-		JPanel mainPanel = new JPanel(new GridBagLayout());
-		mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(5, 5, 5, 5);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.anchor = GridBagConstraints.WEST;
-
-		// --- Row 0: HOST SYSTEM ---
-		gbc.gridx = 0; gbc.gridy = 0;
-		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
-		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
-		mainPanel.add(hostTypeBox, gbc);
-
-		// --- Row 1: CLIPBOARD TOGGLE ---
-		gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3;
-		JCheckBox useClipboardCheck = new JCheckBox("Transfer to/from Clipboard (Text Only)");
-		mainPanel.add(useClipboardCheck, gbc);
-
-		// --- Row 2: FILE SELECTION ---
-		gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
-		JLabel fileLabel = new JLabel("Local File:");
-		mainPanel.add(fileLabel, gbc);
-		gbc.gridx = 1;
-		JTextField localFileField = new JTextField(30);
-		mainPanel.add(localFileField, gbc);
-		gbc.gridx = 2;
-		JButton browseBtn = new JButton("Browse...");
-		mainPanel.add(browseBtn, gbc);
-
-		// --- Row 3: DATASET ---
-		gbc.gridx = 0; gbc.gridy = 3;
-		JLabel datasetLabel = new JLabel("Host Dataset:");
-		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JTextField hostDatasetField = new JTextField(30);
-		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
-		mainPanel.add(hostDatasetField, gbc);
-
-		// --- Row 4: TRANSFER MODE ---
-		gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
-		mainPanel.add(modeBox, gbc);
-
-		// --- Row 5: OPTIONS ---
-		gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 3;
-		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
-		JCheckBox appendCheck = new JCheckBox("Append", false);
-		optionsPanel.add(crlfCheck);
-		optionsPanel.add(Box.createHorizontalStrut(15));
-		optionsPanel.add(appendCheck);
-		mainPanel.add(optionsPanel, gbc);
-
-		// --- Row 6: ALLOCATION PARAMETERS ---
-		gbc.gridy = 6;
-		JPanel allocPanel = new JPanel(new GridBagLayout());
-		allocPanel.setBorder(BorderFactory.createTitledBorder("Host Allocation / Format Parameters"));
-		GridBagConstraints agbc = new GridBagConstraints();
-		agbc.insets = new Insets(2, 5, 2, 5);
-		agbc.fill = GridBagConstraints.HORIZONTAL;
-		
-		agbc.gridx = 0; agbc.gridy = 0;
-		allocPanel.add(new JLabel("RECFM:"), agbc);
-		agbc.gridx = 1;
-		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
-		allocPanel.add(recfmBox, agbc);
-		agbc.gridx = 2;
-		allocPanel.add(new JLabel("LRECL:"), agbc);
-		agbc.gridx = 3;
-		JTextField lreclField = new JTextField("", 5);
-		allocPanel.add(lreclField, agbc);
-		
-		agbc.gridx = 0; agbc.gridy = 1;
-		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
-		agbc.gridx = 1;
-		JTextField blksizeField = new JTextField("", 6);
-		allocPanel.add(blksizeField, agbc);
-		agbc.gridx = 2;
-		JLabel spaceLabel = new JLabel("SPACE:");
-		allocPanel.add(spaceLabel, agbc);
-		agbc.gridx = 3;
-		JTextField spaceField = new JTextField("", 8);
-		allocPanel.add(spaceField, agbc);
-		
-		mainPanel.add(allocPanel, gbc);
-
-		// =======================================================================
-		// 3. LISTENERS
-		// =======================================================================
-
-		// --- A. CLIPBOARD LISTENER ---
-		useClipboardCheck.addActionListener(e -> {
-			boolean useClip = useClipboardCheck.isSelected();
-			
-			localFileField.setEnabled(!useClip);
-			browseBtn.setEnabled(!useClip);
-			fileLabel.setText(useClip ? "Source/Dest:" : "Local File:");
-			localFileField.setText(useClip ? "(System Clipboard)" : "");
-			
-			modeBox.setEnabled(!useClip);
-			if (useClip) {
-				modeBox.setSelectedIndex(0); 
-				crlfCheck.setSelected(true); 
-				crlfCheck.setEnabled(false);
-			} else {
-				crlfCheck.setEnabled(modeBox.getSelectedIndex() == 0);
-			}
-			
-			recfmBox.setEnabled(!useClip);
-			lreclField.setEnabled(!useClip);
-			blksizeField.setEnabled(!useClip);
-			spaceField.setEnabled(!useClip);
-		});
-
-		// --- B. HOST TYPE LISTENER ---
-		hostTypeBox.addActionListener(e -> {
-			boolean tso = (hostTypeBox.getSelectedIndex() == 0);
-			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
-			spaceLabel.setVisible(tso);
-			spaceField.setVisible(tso);
-			
-			if (!useClipboardCheck.isSelected() && !localFileField.getText().isEmpty()) {
-				String path = localFileField.getText();
-				String name = new File(path).getName().toUpperCase();
-				if (tso) hostDatasetField.setText(name);
-				else hostDatasetField.setText(name.replace('.', ' ') + " A");
-			}
-		});
-
-		// --- C. BROWSE LISTENER ---
-		browseBtn.addActionListener(e -> {
-			JFileChooser fc = new JFileChooser();
-			if (isDownload ? fc.showSaveDialog(dialog) == JFileChooser.APPROVE_OPTION
-					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-				File f = fc.getSelectedFile();
-				localFileField.setText(f.getAbsolutePath());
-				
-				String name = f.getName().toUpperCase();
-				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) hostDatasetField.setText(name);
-				else {
-					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A")) cmsName += " A";
-					hostDatasetField.setText(cmsName);
-				}
-			}
-		});
-
-		// --- D. MODE LISTENER ---
-		modeBox.addActionListener(e -> {
-			boolean isAscii = (modeBox.getSelectedIndex() == 0);
-			crlfCheck.setEnabled(isAscii);
-			crlfCheck.setSelected(isAscii);
-		});
-
-		// --- E. TRANSFER BUTTON ---
-		transferBtn.addActionListener(e -> {
-			boolean ascii = (modeBox.getSelectedIndex() == 0);
-			boolean isClipboard = useClipboardCheck.isSelected();
-			
-			HostType selectedHostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
-			String dataset = hostDatasetField.getText().trim();
-
-			if (dataset.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error", JOptionPane.ERROR_MESSAGE);
-				return;
-			}
-			
-			// --- AUTO-DETECT LINUX ---
-			// If filename contains "/", assume Linux, overriding the dropdown.
-			HostType inferredType = inferHostType(dataset);
-			HostType actualHostType = (inferredType == HostType.LINUX) ? HostType.LINUX : selectedHostType;
-
-			// ============================
-			// 1. CLIPBOARD TRANSFER
-			// ============================
-			if (isClipboard) {
-				dialog.dispose(); 
-
-				if (actualHostType == HostType.LINUX) {
-					// --- LINUX CLIPBOARD HANDLING ---
-					if (isDownload) {
-						downloadTextFromLinuxConsole(dataset, new MemoryTransferCallback() {
-							public void onDownloadComplete(String content) {
-								try {
-									Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
-									JOptionPane.showMessageDialog(getParentFrame(), "Downloaded from Linux to Clipboard.");
-								} catch (Exception ex) { onError(ex.getMessage()); }
-							}
-							public void onUploadComplete() {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Linux Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} else {
-						// Upload
-						try {
-							String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-							if (text == null) text = "";
-							uploadTextToLinuxConsole(text.getBytes(StandardCharsets.UTF_8), dataset, new MemoryTransferCallback() {
-								public void onUploadComplete() {
-									JOptionPane.showMessageDialog(getParentFrame(), "Uploaded Clipboard to Linux.");
-								}
-								public void onDownloadComplete(String c) {}
-								public void onError(String msg) {
-									JOptionPane.showMessageDialog(getParentFrame(), "Linux Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-								}
-							});
-						} catch (Exception ex) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Clipboard read error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					}
-					return;
-				}
-
-				// --- MAINFRAME CLIPBOARD HANDLING (Existing) ---
-				if (isDownload) {
-					downloadTextFromHost(dataset, actualHostType, new MemoryTransferCallback() {
-						public void onDownloadComplete(String content) {
-                            if (AIManager.isLikelyBinary(content.getBytes())) {
-                                int confirm = JOptionPane.showConfirmDialog(getParentFrame(),
-                                    "The file '" + dataset + "' appears to be binary.\n" +
-                                    "Placing this data on the Clipboard may result in garbage text.\n\n" +
-                                    "Proceed anyway?",
-                                    "Binary Detection Warning",
-                                    JOptionPane.YES_NO_OPTION,
-                                    JOptionPane.WARNING_MESSAGE);
-                                if (confirm != JOptionPane.YES_OPTION) return;
-                            }
-							try {
-								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
-								JOptionPane.showMessageDialog(getParentFrame(), 
-										"Downloaded " + content.length() + " chars to Clipboard.\nFrom: " + dataset);
-							} catch (Exception ex) {
-								onError("Clipboard access failed: " + ex.getMessage());
-							}
-						}
-						public void onUploadComplete() {}
-						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					});
-				} else {
-					try {
-						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-						if (text == null) text = "";
-						
-						uploadTextToHost(text, dataset, actualHostType, new MemoryTransferCallback() {
-							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Successfully uploaded Clipboard content to " + dataset);
-							}
-							public void onDownloadComplete(String c) {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} catch (Exception ex) {
-						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error", JOptionPane.ERROR_MESSAGE);
-					}
-				}
-				return;
-			}
-
-			// ============================
-			// 2. FILE TRANSFER
-			// ============================
-			
-			String localPath = localFileField.getText().trim();
-			if (localPath.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Local File.", "Error", JOptionPane.ERROR_MESSAGE);
-				return;
-			}
-			File localFile = new File(localPath);
-
-			if (actualHostType == HostType.LINUX) {
-				// --- LINUX FILE HANDLING ---
-				dialog.dispose();
-				if (isDownload) {
-					downloadTextFromLinuxConsole(dataset, new MemoryTransferCallback() {
-						public void onDownloadComplete(String content) {
-							try {
-								java.nio.file.Files.write(localFile.toPath(), content.getBytes(StandardCharsets.UTF_8));
-								JOptionPane.showMessageDialog(getParentFrame(), "Downloaded to " + localFile.getName());
-							} catch (IOException ex) { onError("File write error: " + ex.getMessage()); }
-						}
-						public void onUploadComplete() {}
-						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					});
-				} else {
-					// Upload
-					if (!localFile.exists()) {
-						JOptionPane.showMessageDialog(getParentFrame(), "Local file not found.", "Error", JOptionPane.ERROR_MESSAGE);
-						return;
-					}
-					try {
-						byte[] data = java.nio.file.Files.readAllBytes(localFile.toPath());
-						uploadTextToLinuxConsole(data, dataset, new MemoryTransferCallback() {
-							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Complete.");
-							}
-							public void onDownloadComplete(String c) {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} catch (IOException ex) {
-						JOptionPane.showMessageDialog(getParentFrame(), "Read error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-					}
-				}
-				return;
-			}
-
-			// --- MAINFRAME IND$FILE HANDLING (Existing) ---
-			String lrecl = lreclField.getText().trim();
-			if (!isDownload && lrecl.isEmpty() && ascii)
-				lrecl = "255";
-			
-			this.hostType = actualHostType;
-			
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset,
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
-					blksizeField.getText().trim(), spaceField.getText().trim());
-			
-			dialog.dispose();
-			initiateFileTransfer(localPath, cmd, isDownload);
-		});
-
-		// --- F. CANCEL BUTTON ---
-		cancelBtn.addActionListener(e -> dialog.dispose());
-		
-		// 4. Add Panels to Dialog
-		dialog.add(mainPanel, BorderLayout.CENTER);
-		dialog.add(btnPanel, BorderLayout.SOUTH);
-
-		// 5. Set Initial State & Show
-		boolean startTso = (hostTypeBox.getSelectedIndex() == 0);
-		spaceLabel.setVisible(startTso);
-		spaceField.setVisible(startTso);
-		
-		dialog.pack();
-		dialog.setLocationRelativeTo(getParentFrame());
-		dialog.setVisible(true);
-	}
-	*/
-	/*
-	public void showFileTransferDialogGreat(boolean isDownload) {
-		if (!connected) {
-			JOptionPane.showMessageDialog(getParentFrame(), "Not connected to host.", "Connection Required",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
-		dialog.setLayout(new BorderLayout());
-		
-		// 1. Define Logic Buttons EARLY so they are in scope for listeners
-		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
-		JButton cancelBtn = new JButton("Cancel");
-		btnPanel.add(cancelBtn);
-		btnPanel.add(transferBtn);
-
-		// 2. Layout Main Panel
-		JPanel mainPanel = new JPanel(new GridBagLayout());
-		mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(5, 5, 5, 5);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.anchor = GridBagConstraints.WEST;
-
-		// --- Row 0: HOST SYSTEM ---
-		gbc.gridx = 0; gbc.gridy = 0;
-		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
-		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
-		mainPanel.add(hostTypeBox, gbc);
-
-		// --- Row 1: CLIPBOARD TOGGLE ---
-		gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3;
-		JCheckBox useClipboardCheck = new JCheckBox("Transfer to/from Clipboard (Text Only)");
-		mainPanel.add(useClipboardCheck, gbc);
-
-		// --- Row 2: FILE SELECTION ---
-		gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
-		JLabel fileLabel = new JLabel("Local File:");
-		mainPanel.add(fileLabel, gbc);
-		gbc.gridx = 1;
-		JTextField localFileField = new JTextField(30);
-		mainPanel.add(localFileField, gbc);
-		gbc.gridx = 2;
-		JButton browseBtn = new JButton("Browse...");
-		mainPanel.add(browseBtn, gbc);
-
-		// --- Row 3: DATASET ---
-		gbc.gridx = 0; gbc.gridy = 3;
-		JLabel datasetLabel = new JLabel("Host Dataset:");
-		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JTextField hostDatasetField = new JTextField(30);
-		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
-		mainPanel.add(hostDatasetField, gbc);
-
-		// --- Row 4: TRANSFER MODE ---
-		gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1; gbc.gridwidth = 2;
-		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
-		mainPanel.add(modeBox, gbc);
-
-		// --- Row 5: OPTIONS ---
-		gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 3;
-		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
-		JCheckBox appendCheck = new JCheckBox("Append", false);
-		optionsPanel.add(crlfCheck);
-		optionsPanel.add(Box.createHorizontalStrut(15));
-		optionsPanel.add(appendCheck);
-		mainPanel.add(optionsPanel, gbc);
-
-		// --- Row 6: ALLOCATION PARAMETERS ---
-		gbc.gridy = 6;
-		JPanel allocPanel = new JPanel(new GridBagLayout());
-		allocPanel.setBorder(BorderFactory.createTitledBorder("Host Allocation / Format Parameters"));
-		GridBagConstraints agbc = new GridBagConstraints();
-		agbc.insets = new Insets(2, 5, 2, 5);
-		agbc.fill = GridBagConstraints.HORIZONTAL;
-		
-		agbc.gridx = 0; agbc.gridy = 0;
-		allocPanel.add(new JLabel("RECFM:"), agbc);
-		agbc.gridx = 1;
-		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
-		allocPanel.add(recfmBox, agbc);
-		agbc.gridx = 2;
-		allocPanel.add(new JLabel("LRECL:"), agbc);
-		agbc.gridx = 3;
-		JTextField lreclField = new JTextField("", 5);
-		allocPanel.add(lreclField, agbc);
-		
-		agbc.gridx = 0; agbc.gridy = 1;
-		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
-		agbc.gridx = 1;
-		JTextField blksizeField = new JTextField("", 6);
-		allocPanel.add(blksizeField, agbc);
-		agbc.gridx = 2;
-		JLabel spaceLabel = new JLabel("SPACE:");
-		allocPanel.add(spaceLabel, agbc);
-		agbc.gridx = 3;
-		JTextField spaceField = new JTextField("", 8);
-		allocPanel.add(spaceField, agbc);
-		
-		mainPanel.add(allocPanel, gbc);
-
-		// =======================================================================
-		// 3. LISTENERS
-		// =======================================================================
-
-		// --- A. CLIPBOARD LISTENER ---
-		useClipboardCheck.addActionListener(e -> {
-			boolean useClip = useClipboardCheck.isSelected();
-			
-			localFileField.setEnabled(!useClip);
-			browseBtn.setEnabled(!useClip);
-			fileLabel.setText(useClip ? "Source/Dest:" : "Local File:");
-			localFileField.setText(useClip ? "(System Clipboard)" : "");
-			
-			modeBox.setEnabled(!useClip);
-			if (useClip) {
-				modeBox.setSelectedIndex(0); 
-				crlfCheck.setSelected(true); 
-				crlfCheck.setEnabled(false);
-			} else {
-				crlfCheck.setEnabled(modeBox.getSelectedIndex() == 0);
-			}
-			
-			recfmBox.setEnabled(!useClip);
-			lreclField.setEnabled(!useClip);
-			blksizeField.setEnabled(!useClip);
-			spaceField.setEnabled(!useClip);
-		});
-
-		// --- B. HOST TYPE LISTENER ---
-		hostTypeBox.addActionListener(e -> {
-			boolean tso = (hostTypeBox.getSelectedIndex() == 0);
-			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
-			spaceLabel.setVisible(tso);
-			spaceField.setVisible(tso);
-			
-			if (!useClipboardCheck.isSelected() && !localFileField.getText().isEmpty()) {
-				String path = localFileField.getText();
-				String name = new File(path).getName().toUpperCase();
-				if (tso) hostDatasetField.setText(name);
-				else hostDatasetField.setText(name.replace('.', ' ') + " A");
-			}
-		});
-
-		// --- C. BROWSE LISTENER ---
-		browseBtn.addActionListener(e -> {
-			JFileChooser fc = new JFileChooser();
-			if (isDownload ? fc.showSaveDialog(dialog) == JFileChooser.APPROVE_OPTION
-					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-				File f = fc.getSelectedFile();
-				localFileField.setText(f.getAbsolutePath());
-				
-				String name = f.getName().toUpperCase();
-				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) hostDatasetField.setText(name);
-				else {
-					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A")) cmsName += " A";
-					hostDatasetField.setText(cmsName);
-				}
-			}
-		});
-
-		// --- D. MODE LISTENER ---
-		modeBox.addActionListener(e -> {
-			boolean isAscii = (modeBox.getSelectedIndex() == 0);
-			crlfCheck.setEnabled(isAscii);
-			crlfCheck.setSelected(isAscii);
-		});
-
-		// --- E. TRANSFER BUTTON ---
-		transferBtn.addActionListener(e -> {
-			boolean ascii = (modeBox.getSelectedIndex() == 0);
-			boolean isClipboard = useClipboardCheck.isSelected();
-			
-			HostType selectedHostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
-			String dataset = hostDatasetField.getText().trim();
-
-			if (dataset.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error", JOptionPane.ERROR_MESSAGE);
-				return;
-			}
-
-			if (isClipboard) {
-				dialog.dispose(); 
-
-				if (isDownload) {
-					// DOWNLOAD HOST -> CLIPBOARD
-					downloadTextFromHost(dataset, selectedHostType, new MemoryTransferCallback() {
-						public void onDownloadComplete(String content) {
-                            if (AIManager.isLikelyBinary(content.getBytes())) {
-                                int confirm = JOptionPane.showConfirmDialog(getParentFrame(),
-                                    "The file '" + dataset + "' appears to be binary.\n" +
-                                    "Placing this data on the Clipboard may result in garbage text.\n\n" +
-                                    "Proceed anyway?",
-                                    "Binary Detection Warning",
-                                    JOptionPane.YES_NO_OPTION,
-                                    JOptionPane.WARNING_MESSAGE);
-                                if (confirm != JOptionPane.YES_OPTION) return;
-                            }
-							try {
-								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
-								JOptionPane.showMessageDialog(getParentFrame(), 
-										"Downloaded " + content.length() + " chars to Clipboard.\nFrom: " + dataset);
-							} catch (Exception ex) {
-								onError("Clipboard access failed: " + ex.getMessage());
-							}
-						}
-						public void onUploadComplete() {}
-						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					});
-				} else {
-					// UPLOAD CLIPBOARD -> HOST
-					try {
-						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-						if (text == null) text = "";
-						
-						uploadTextToHost(text, dataset, selectedHostType, new MemoryTransferCallback() {
-							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Successfully uploaded Clipboard content to " + dataset);
-							}
-							public void onDownloadComplete(String c) {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} catch (Exception ex) {
-						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error", JOptionPane.ERROR_MESSAGE);
-					}
-				}
-				return;
-			}
-
-			// --- FILE LOGIC ---
-			String lrecl = lreclField.getText().trim();
-			if (!isDownload && lrecl.isEmpty() && ascii)
-				lrecl = "255";
-			
-			this.hostType = selectedHostType;
-			
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset,
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
-					blksizeField.getText().trim(), spaceField.getText().trim());
-			
-			dialog.dispose();
-			initiateFileTransfer(localFileField.getText().trim(), cmd, isDownload);
-		});
-
-		// --- F. CANCEL BUTTON ---
-		cancelBtn.addActionListener(e -> dialog.dispose());
-		
-		// 4. Add Panels to Dialog
-		dialog.add(mainPanel, BorderLayout.CENTER);
-		dialog.add(btnPanel, BorderLayout.SOUTH);
-
-		// 5. Set Initial State & Show
-		boolean startTso = (hostTypeBox.getSelectedIndex() == 0);
-		spaceLabel.setVisible(startTso);
-		spaceField.setVisible(startTso);
-		
-		dialog.pack();
-		dialog.setLocationRelativeTo(getParentFrame());
-		dialog.setVisible(true);
-	}
-	
-	public void showFileTransferDialogPrettyGood(boolean isDownload) {
-		if (!connected) {
-			JOptionPane.showMessageDialog(getParentFrame(), "Not connected to host.", "Connection Required",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
-		dialog.setLayout(new BorderLayout());
-		JPanel mainPanel = new JPanel(new GridBagLayout());
-		mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(5, 5, 5, 5);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.anchor = GridBagConstraints.WEST;
-
-		gbc.gridx = 0;
-		gbc.gridy = 0;
-		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
-		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
-		mainPanel.add(hostTypeBox, gbc);
-
-		// --- CLIPBOARD TOGGLE ---
-		gbc.gridx = 0;
-		gbc.gridy = 1;
-		gbc.gridwidth = 3;
-		JCheckBox useClipboardCheck = new JCheckBox("Transfer to/from Clipboard (Text Only)");
-		mainPanel.add(useClipboardCheck, gbc);
-
-		// --- FILE SELECTION ---
-		gbc.gridx = 0;
-		gbc.gridy = 2;
-		gbc.gridwidth = 1;
-		JLabel fileLabel = new JLabel("Local File:");
-		mainPanel.add(fileLabel, gbc);
-		gbc.gridx = 1;
-		JTextField localFileField = new JTextField(30);
-		mainPanel.add(localFileField, gbc);
-		gbc.gridx = 2;
-		JButton browseBtn = new JButton("Browse...");
-		mainPanel.add(browseBtn, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 3;
-		JLabel datasetLabel = new JLabel("Host Dataset:");
-		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JTextField hostDatasetField = new JTextField(30);
-		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
-		mainPanel.add(hostDatasetField, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 4;
-		gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
-		mainPanel.add(modeBox, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 5;
-		gbc.gridwidth = 3;
-		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
-		JCheckBox appendCheck = new JCheckBox("Append", false);
-		optionsPanel.add(crlfCheck);
-		optionsPanel.add(Box.createHorizontalStrut(15));
-		optionsPanel.add(appendCheck);
-		mainPanel.add(optionsPanel, gbc);
-
-		// --- RE-ORDERED LOGIC: Add Clipboard Listener HERE ---
-		// We define this AFTER modeBox and crlfCheck are created so we can control them.
-		useClipboardCheck.addActionListener(e -> {
-			boolean useClip = useClipboardCheck.isSelected();
-			
-			// 1. Toggle File Fields
-			localFileField.setEnabled(!useClip);
-			browseBtn.setEnabled(!useClip);
-			fileLabel.setText(useClip ? "Source/Dest:" : "Local File:");
-			localFileField.setText(useClip ? "(System Clipboard)" : "");
-			
-			// 2. Disable/Force Transfer Mode
-			modeBox.setEnabled(!useClip);
-			if (useClip) {
-				modeBox.setSelectedIndex(0); // Force ASCII
-				crlfCheck.setSelected(true); // Force CRLF (Standard for clipboard text)
-				crlfCheck.setEnabled(false); // Lock CRLF
-			} else {
-				// Restore capability
-				crlfCheck.setEnabled(modeBox.getSelectedIndex() == 0);
-			}
-		});
-		// -----------------------------------------------------
-
-		gbc.gridy = 6;
-		JPanel allocPanel = new JPanel(new GridBagLayout());
-		allocPanel.setBorder(BorderFactory.createTitledBorder("Host Allocation / Format Parameters"));
-		GridBagConstraints agbc = new GridBagConstraints();
-		agbc.insets = new Insets(2, 5, 2, 5);
-		agbc.fill = GridBagConstraints.HORIZONTAL;
-		agbc.gridx = 0;
-		agbc.gridy = 0;
-		allocPanel.add(new JLabel("RECFM:"), agbc);
-		agbc.gridx = 1;
-		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
-		allocPanel.add(recfmBox, agbc);
-		agbc.gridx = 2;
-		allocPanel.add(new JLabel("LRECL:"), agbc);
-		agbc.gridx = 3;
-		JTextField lreclField = new JTextField("", 5);
-		allocPanel.add(lreclField, agbc);
-		agbc.gridx = 0;
-		agbc.gridy = 1;
-		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
-		agbc.gridx = 1;
-		JTextField blksizeField = new JTextField("", 6);
-		allocPanel.add(blksizeField, agbc);
-		agbc.gridx = 2;
-		JLabel spaceLabel = new JLabel("SPACE:");
-		allocPanel.add(spaceLabel, agbc);
-		agbc.gridx = 3;
-		JTextField spaceField = new JTextField("", 8);
-		allocPanel.add(spaceField, agbc);
-		mainPanel.add(allocPanel, gbc);
-
-		dialog.add(mainPanel, BorderLayout.CENTER);
-		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
-		JButton cancelBtn = new JButton("Cancel");
-		btnPanel.add(cancelBtn);
-		btnPanel.add(transferBtn);
-		dialog.add(btnPanel, BorderLayout.SOUTH);
-
-		// Host Type Logic
-		hostTypeBox.addActionListener(e -> {
-			boolean tso = (hostTypeBox.getSelectedIndex() == 0);
-			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
-			spaceLabel.setVisible(tso);
-			spaceField.setVisible(tso);
-			
-			// Hinting logic (only if not clipboard)
-			if (!useClipboardCheck.isSelected() && !localFileField.getText().isEmpty()) {
-				String path = localFileField.getText();
-				String name = new File(path).getName().toUpperCase();
-				if (tso) hostDatasetField.setText(name);
-				else hostDatasetField.setText(name.replace('.', ' ') + " A");
-			}
-		});
-
-		// Browse Logic
-		browseBtn.addActionListener(e -> {
-			JFileChooser fc = new JFileChooser();
-			if (isDownload ? fc.showSaveDialog(dialog) == JFileChooser.APPROVE_OPTION
-					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-				File f = fc.getSelectedFile();
-				localFileField.setText(f.getAbsolutePath());
-				
-				// Hinting
-				String name = f.getName().toUpperCase();
-				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) hostDatasetField.setText(name);
-				else {
-					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A")) cmsName += " A";
-					hostDatasetField.setText(cmsName);
-				}
-			}
-		});
-
-		modeBox.addActionListener(e -> {
-			boolean isAscii = (modeBox.getSelectedIndex() == 0);
-			crlfCheck.setEnabled(isAscii);
-			crlfCheck.setSelected(isAscii);
-		});
-
-		// --- TRANSFER ACTION ---
-		transferBtn.addActionListener(e -> {
-			boolean ascii = (modeBox.getSelectedIndex() == 0);
-			boolean isClipboard = useClipboardCheck.isSelected();
-			
-			// Determine Host Type from Dropdown
-			HostType selectedHostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
-			String dataset = hostDatasetField.getText().trim();
-
-			if (dataset.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error", JOptionPane.ERROR_MESSAGE);
-				return;
-			}
-
-			// --- CLIPBOARD PATH ---
-			if (isClipboard) {
-				dialog.dispose(); // Close dialog first
-
-				if (isDownload) {
-					// DOWNLOAD HOST -> CLIPBOARD
-					downloadTextFromHost(dataset, selectedHostType, new MemoryTransferCallback() {
-						public void onDownloadComplete(String content) {
-                            // Guard Rail: Check for Binary Garbage
-                            if (AIManager.isLikelyBinary(content.getBytes())) {
-                                int confirm = JOptionPane.showConfirmDialog(getParentFrame(),
-                                    "The file '" + dataset + "' appears to be binary.\n" +
-                                    "Placing this data on the Clipboard may result in garbage text.\n\n" +
-                                    "Proceed anyway?",
-                                    "Binary Detection Warning",
-                                    JOptionPane.YES_NO_OPTION,
-                                    JOptionPane.WARNING_MESSAGE);
-                                if (confirm != JOptionPane.YES_OPTION) return;
-                            }
-
-							try {
-								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
-								JOptionPane.showMessageDialog(getParentFrame(), 
-										"Downloaded " + content.length() + " chars to Clipboard.\nFrom: " + dataset);
-							} catch (Exception ex) {
-								onError("Clipboard access failed: " + ex.getMessage());
-							}
-						}
-						public void onUploadComplete() {}
-						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					});
-				} else {
-					// UPLOAD CLIPBOARD -> HOST
-					try {
-						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-						if (text == null) text = "";
-						
-						uploadTextToHost(text, dataset, selectedHostType, new MemoryTransferCallback() {
-							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Successfully uploaded Clipboard content to " + dataset);
-							}
-							public void onDownloadComplete(String c) {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} catch (Exception ex) {
-						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error", JOptionPane.ERROR_MESSAGE);
-					}
-				}
-				return;
-			}
-
-			// --- FILE PATH (Existing Logic) ---
-			String lrecl = lreclField.getText().trim();
-			if (!isDownload && lrecl.isEmpty() && ascii)
-				lrecl = "255";
-			
-			this.hostType = selectedHostType;
-			
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset,
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
-					blksizeField.getText().trim(), spaceField.getText().trim());
-			
-			dialog.dispose();
-			initiateFileTransfer(localFileField.getText().trim(), cmd, isDownload);
-		});
-
-		cancelBtn.addActionListener(e -> dialog.dispose());
-		dialog.pack();
-		dialog.setLocationRelativeTo(getParentFrame());
-		dialog.setVisible(true);
-	}
-	
-	public void showFileTransferDialogWorkingWell(boolean isDownload) {
-		if (!connected) {
-			JOptionPane.showMessageDialog(getParentFrame(), "Not connected to host.", "Connection Required",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
-		dialog.setLayout(new BorderLayout());
-		JPanel mainPanel = new JPanel(new GridBagLayout());
-		mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(5, 5, 5, 5);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.anchor = GridBagConstraints.WEST;
-
-		gbc.gridx = 0;
-		gbc.gridy = 0;
-		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
-		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
-		mainPanel.add(hostTypeBox, gbc);
-
-		// --- NEW: CLIPBOARD TOGGLE ---
-		gbc.gridx = 0;
-		gbc.gridy = 1;
-		gbc.gridwidth = 3;
-		JCheckBox useClipboardCheck = new JCheckBox("Transfer to/from Clipboard (Text Only)");
-		mainPanel.add(useClipboardCheck, gbc);
-
-		// --- FILE SELECTION ---
-		gbc.gridx = 0;
-		gbc.gridy = 2;
-		gbc.gridwidth = 1;
-		JLabel fileLabel = new JLabel("Local File:");
-		mainPanel.add(fileLabel, gbc);
-		gbc.gridx = 1;
-		JTextField localFileField = new JTextField(30);
-		mainPanel.add(localFileField, gbc);
-		gbc.gridx = 2;
-		JButton browseBtn = new JButton("Browse...");
-		mainPanel.add(browseBtn, gbc);
-
-		// Logic to toggle fields based on Clipboard Checkbox
-		useClipboardCheck.addActionListener(e -> {
-			boolean useClip = useClipboardCheck.isSelected();
-			localFileField.setEnabled(!useClip);
-			browseBtn.setEnabled(!useClip);
-			fileLabel.setText(useClip ? "Source/Dest:" : "Local File:");
-			localFileField.setText(useClip ? "(System Clipboard)" : "");
-		});
-
-		gbc.gridx = 0;
-		gbc.gridy = 3;
-		JLabel datasetLabel = new JLabel("Host Dataset:");
-		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JTextField hostDatasetField = new JTextField(30);
-		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
-		mainPanel.add(hostDatasetField, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 4;
-		gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
-		mainPanel.add(modeBox, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 5;
-		gbc.gridwidth = 3;
-		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
-		JCheckBox appendCheck = new JCheckBox("Append", false);
-		optionsPanel.add(crlfCheck);
-		optionsPanel.add(Box.createHorizontalStrut(15));
-		optionsPanel.add(appendCheck);
-		mainPanel.add(optionsPanel, gbc);
-
-		gbc.gridy = 6;
-		JPanel allocPanel = new JPanel(new GridBagLayout());
-		allocPanel.setBorder(BorderFactory.createTitledBorder("Host Allocation / Format Parameters"));
-		GridBagConstraints agbc = new GridBagConstraints();
-		agbc.insets = new Insets(2, 5, 2, 5);
-		agbc.fill = GridBagConstraints.HORIZONTAL;
-		agbc.gridx = 0;
-		agbc.gridy = 0;
-		allocPanel.add(new JLabel("RECFM:"), agbc);
-		agbc.gridx = 1;
-		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
-		allocPanel.add(recfmBox, agbc);
-		agbc.gridx = 2;
-		allocPanel.add(new JLabel("LRECL:"), agbc);
-		agbc.gridx = 3;
-		JTextField lreclField = new JTextField("", 5);
-		allocPanel.add(lreclField, agbc);
-		agbc.gridx = 0;
-		agbc.gridy = 1;
-		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
-		agbc.gridx = 1;
-		JTextField blksizeField = new JTextField("", 6);
-		allocPanel.add(blksizeField, agbc);
-		agbc.gridx = 2;
-		JLabel spaceLabel = new JLabel("SPACE:");
-		allocPanel.add(spaceLabel, agbc);
-		agbc.gridx = 3;
-		JTextField spaceField = new JTextField("", 8);
-		allocPanel.add(spaceField, agbc);
-		mainPanel.add(allocPanel, gbc);
-
-		dialog.add(mainPanel, BorderLayout.CENTER);
-		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
-		JButton cancelBtn = new JButton("Cancel");
-		btnPanel.add(cancelBtn);
-		btnPanel.add(transferBtn);
-		dialog.add(btnPanel, BorderLayout.SOUTH);
-
-		// Host Type Logic
-		hostTypeBox.addActionListener(e -> {
-			boolean tso = (hostTypeBox.getSelectedIndex() == 0);
-			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
-			spaceLabel.setVisible(tso);
-			spaceField.setVisible(tso);
-			
-			// Hinting logic (only if not clipboard)
-			if (!useClipboardCheck.isSelected() && !localFileField.getText().isEmpty()) {
-				String path = localFileField.getText();
-				String name = new File(path).getName().toUpperCase();
-				if (tso) hostDatasetField.setText(name);
-				else hostDatasetField.setText(name.replace('.', ' ') + " A");
-			}
-		});
-
-		// Browse Logic
-		browseBtn.addActionListener(e -> {
-			JFileChooser fc = new JFileChooser();
-			if (isDownload ? fc.showSaveDialog(dialog) == JFileChooser.APPROVE_OPTION
-					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-				File f = fc.getSelectedFile();
-				localFileField.setText(f.getAbsolutePath());
-				
-				// Hinting
-				String name = f.getName().toUpperCase();
-				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) hostDatasetField.setText(name);
-				else {
-					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A")) cmsName += " A";
-					hostDatasetField.setText(cmsName);
-				}
-			}
-		});
-
-		modeBox.addActionListener(e -> {
-			boolean isAscii = (modeBox.getSelectedIndex() == 0);
-			crlfCheck.setEnabled(isAscii);
-			crlfCheck.setSelected(isAscii);
-		});
-
-		// --- TRANSFER ACTION ---
-		transferBtn.addActionListener(e -> {
-			boolean ascii = (modeBox.getSelectedIndex() == 0);
-			boolean isClipboard = useClipboardCheck.isSelected();
-			
-			// Determine Host Type from Dropdown (Explicit User Choice overrides auto-detect here)
-			HostType selectedHostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
-			String dataset = hostDatasetField.getText().trim();
-
-			if (dataset.isEmpty()) {
-				JOptionPane.showMessageDialog(dialog, "Please specify a Host Dataset/File.", "Error", JOptionPane.ERROR_MESSAGE);
-				return;
-			}
-
-			// --- CLIPBOARD PATH ---
-			if (isClipboard) {
-				if (!ascii) {
-					JOptionPane.showMessageDialog(dialog, "Clipboard transfer only supports ASCII (Text) mode.", "Restricted", JOptionPane.WARNING_MESSAGE);
-					return;
-				}
-				
-				dialog.dispose(); // Close dialog first
-
-				if (isDownload) {
-					// DOWNLOAD HOST -> CLIPBOARD
-					downloadTextFromHost(dataset, selectedHostType, new MemoryTransferCallback() {
-						public void onDownloadComplete(String content) {
-							try {
-		                        // --- NEW GUARD RAIL ---
-	                            // Check if the result looks like binary garbage, even if transferred in ASCII mode
-	                            if (AIManager.isLikelyBinary(content.getBytes())) {
-	                                int confirm = JOptionPane.showConfirmDialog(getParentFrame(),
-	                                    "The file '" + dataset + "' appears to be binary.\n" +
-	                                    "Placing this data on the Clipboard may result in garbage text.\n\n" +
-	                                    "Proceed anyway?",
-	                                    "Binary Detection Warning",
-	                                    JOptionPane.YES_NO_OPTION,
-	                                    JOptionPane.WARNING_MESSAGE);
-	                                
-	                                if (confirm != JOptionPane.YES_OPTION) return;
-	                            }
-	                            // ----------------------
-								Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
-								JOptionPane.showMessageDialog(getParentFrame(), 
-										"Downloaded " + content.length() + " chars to Clipboard.\nFrom: " + dataset);
-							} catch (Exception ex) {
-								onError("Clipboard access failed: " + ex.getMessage());
-							}
-						}
-						public void onUploadComplete() {}
-						public void onError(String msg) {
-							JOptionPane.showMessageDialog(getParentFrame(), "Download Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-						}
-					});
-				} else {
-					// UPLOAD CLIPBOARD -> HOST
-					try {
-						String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-						if (text == null) text = "";
-						
-						uploadTextToHost(text, dataset, selectedHostType, new MemoryTransferCallback() {
-							public void onUploadComplete() {
-								JOptionPane.showMessageDialog(getParentFrame(), "Successfully uploaded Clipboard content to " + dataset);
-							}
-							public void onDownloadComplete(String c) {}
-							public void onError(String msg) {
-								JOptionPane.showMessageDialog(getParentFrame(), "Upload Failed: " + msg, "Error", JOptionPane.ERROR_MESSAGE);
-							}
-						});
-					} catch (Exception ex) {
-						JOptionPane.showMessageDialog(dialog, "Could not read text from Clipboard.", "Error", JOptionPane.ERROR_MESSAGE);
-					}
-				}
-				return;
-			}
-
-			// --- FILE PATH (Existing Logic) ---
-			String lrecl = lreclField.getText().trim();
-			if (!isDownload && lrecl.isEmpty() && ascii)
-				lrecl = "255";
-			
-			this.hostType = selectedHostType;
-			
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, dataset,
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
-					blksizeField.getText().trim(), spaceField.getText().trim());
-			
-			dialog.dispose();
-			initiateFileTransfer(localFileField.getText().trim(), cmd, isDownload);
-		});
-
-		cancelBtn.addActionListener(e -> dialog.dispose());
-		dialog.pack();
-		dialog.setLocationRelativeTo(getParentFrame());
-		dialog.setVisible(true);
-	}
-	
-	public void showFileTransferDialogWorking(boolean isDownload) {
-		if (!connected) {
-			JOptionPane.showMessageDialog(getParentFrame(), "Not connected to host.", "Connection Required",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		JDialog dialog = new JDialog(getParentFrame(), isDownload ? "Download from Host" : "Upload to Host", true);
-		dialog.setLayout(new BorderLayout());
-		JPanel mainPanel = new JPanel(new GridBagLayout());
-		mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(5, 5, 5, 5);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.anchor = GridBagConstraints.WEST;
-
-		gbc.gridx = 0;
-		gbc.gridy = 0;
-		mainPanel.add(new JLabel("Host System:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> hostTypeBox = new JComboBox<>(new String[] { "TSO (z/OS)", "CMS (z/VM)" });
-		hostTypeBox.setSelectedIndex(hostType == HostType.TSO ? 0 : 1);
-		mainPanel.add(hostTypeBox, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 1;
-		gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Local File:"), gbc);
-		gbc.gridx = 1;
-		JTextField localFileField = new JTextField(30);
-		mainPanel.add(localFileField, gbc);
-		gbc.gridx = 2;
-		JButton browseBtn = new JButton("Browse...");
-		mainPanel.add(browseBtn, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 2;
-		JLabel datasetLabel = new JLabel("Host Dataset:");
-		mainPanel.add(datasetLabel, gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JTextField hostDatasetField = new JTextField(30);
-		hostDatasetField.setText(hostType == HostType.TSO ? "USER.TEST.DATA" : "TEST DATA A");
-		mainPanel.add(hostDatasetField, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 3;
-		gbc.gridwidth = 1;
-		mainPanel.add(new JLabel("Transfer Mode:"), gbc);
-		gbc.gridx = 1;
-		gbc.gridwidth = 2;
-		JComboBox<String> modeBox = new JComboBox<>(new String[] { "ASCII (Text)", "BINARY" });
-		mainPanel.add(modeBox, gbc);
-
-		gbc.gridx = 0;
-		gbc.gridy = 4;
-		gbc.gridwidth = 3;
-		JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		JCheckBox crlfCheck = new JCheckBox("CRLF (Text Mode)", true);
-		JCheckBox appendCheck = new JCheckBox("Append", false);
-		optionsPanel.add(crlfCheck);
-		optionsPanel.add(Box.createHorizontalStrut(15));
-		optionsPanel.add(appendCheck);
-		mainPanel.add(optionsPanel, gbc);
-
-		gbc.gridy = 5;
-		JPanel allocPanel = new JPanel(new GridBagLayout());
-		allocPanel.setBorder(BorderFactory.createTitledBorder("Host Allocation / Format Parameters"));
-		GridBagConstraints agbc = new GridBagConstraints();
-		agbc.insets = new Insets(2, 5, 2, 5);
-		agbc.fill = GridBagConstraints.HORIZONTAL;
-		agbc.gridx = 0;
-		agbc.gridy = 0;
-		allocPanel.add(new JLabel("RECFM:"), agbc);
-		agbc.gridx = 1;
-		JComboBox<String> recfmBox = new JComboBox<>(new String[] { "V", "F", "U", "" });
-		allocPanel.add(recfmBox, agbc);
-		agbc.gridx = 2;
-		allocPanel.add(new JLabel("LRECL:"), agbc);
-		agbc.gridx = 3;
-		JTextField lreclField = new JTextField("", 5);
-		allocPanel.add(lreclField, agbc);
-		agbc.gridx = 0;
-		agbc.gridy = 1;
-		allocPanel.add(new JLabel("BLKSIZE:"), agbc);
-		agbc.gridx = 1;
-		JTextField blksizeField = new JTextField("", 6);
-		allocPanel.add(blksizeField, agbc);
-		agbc.gridx = 2;
-		JLabel spaceLabel = new JLabel("SPACE:");
-		allocPanel.add(spaceLabel, agbc);
-		agbc.gridx = 3;
-		JTextField spaceField = new JTextField("", 8);
-		allocPanel.add(spaceField, agbc);
-		mainPanel.add(allocPanel, gbc);
-
-		dialog.add(mainPanel, BorderLayout.CENTER);
-		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton transferBtn = new JButton(isDownload ? "Download" : "Upload");
-		JButton cancelBtn = new JButton("Cancel");
-		btnPanel.add(cancelBtn);
-		btnPanel.add(transferBtn);
-		dialog.add(btnPanel, BorderLayout.SOUTH);
-
-		// Host Type Logic
-		hostTypeBox.addActionListener(e -> {
-			boolean tso = (hostTypeBox.getSelectedIndex() == 0);
-			datasetLabel.setText(tso ? "Host Dataset:" : "Host File:");
-			spaceLabel.setVisible(tso);
-			spaceField.setVisible(tso);
-
-			// Re-trigger hinting if file is selected
-			if (!localFileField.getText().isEmpty()) {
-				String path = localFileField.getText();
-				String name = new File(path).getName().toUpperCase();
-				if (tso)
-					hostDatasetField.setText(name); // TSO: FILE.TXT
-				else
-					hostDatasetField.setText(name.replace('.', ' ') + " A"); // CMS: FILE TXT A
-			}
-		});
-
-		// Browse Logic with Auto-Hinting
-		browseBtn.addActionListener(e -> {
-			JFileChooser fc = new JFileChooser();
-			if (isDownload ? fc.showSaveDialog(dialog) == JFileChooser.APPROVE_OPTION
-					: fc.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-				File f = fc.getSelectedFile();
-				localFileField.setText(f.getAbsolutePath());
-
-				// Smart Hinting Logic
-				String name = f.getName().toUpperCase();
-				boolean isTSO = (hostTypeBox.getSelectedIndex() == 0);
-				if (isTSO) {
-					// TSO: Keep dots, e.g. MY.DATA.TXT
-					hostDatasetField.setText(name);
-				} else {
-					// CMS: Replace dots with spaces, append Mode A
-					// e.g. PROFILE.EXEC -> PROFILE EXEC A
-					String cmsName = name.replace('.', ' ');
-					if (!cmsName.endsWith(" A"))
-						cmsName += " A";
-					hostDatasetField.setText(cmsName);
-				}
-			}
-		});
-
-		modeBox.addActionListener(e -> {
-			boolean isAscii = (modeBox.getSelectedIndex() == 0);
-			crlfCheck.setEnabled(isAscii);
-			if (!isAscii)
-				crlfCheck.setSelected(false);
-			else
-				crlfCheck.setSelected(true);
-		});
-		transferBtn.addActionListener(e -> {
-			boolean ascii = (modeBox.getSelectedIndex() == 0);
-			String lrecl = lreclField.getText().trim();
-			if (!isDownload && lrecl.isEmpty() && ascii)
-				lrecl = "255";
-			hostType = hostTypeBox.getSelectedIndex() == 0 ? HostType.TSO : HostType.CMS;
-			String cmd = buildIndFileCommand(isDownload, hostType == HostType.TSO, hostDatasetField.getText().trim(),
-					ascii, crlfCheck.isSelected(), appendCheck.isSelected(), (String) recfmBox.getSelectedItem(), lrecl,
-					blksizeField.getText().trim(), spaceField.getText().trim());
-			dialog.dispose();
-			initiateFileTransfer(localFileField.getText().trim(), cmd, isDownload);
-		});
-		cancelBtn.addActionListener(e -> dialog.dispose());
-		dialog.pack();
-		dialog.setLocationRelativeTo(getParentFrame());
-		dialog.setVisible(true);
-	}
-*/
 	private void handleDataChain(byte[] data, int offset, int length) {
 		if (offset + 3 >= data.length)
 			return;
@@ -3570,7 +2539,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		}
 		return cmd.toString();
 	}
-	
+
 	private void handleDCOpen(byte[] data, int offset, int length) {
 		String filename = "";
 		// Parse the filename from the SF header (usually FT:DATA or FT:MSG)
@@ -3587,10 +2556,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 				break;
 			}
 		}
-		
+
 		// If the filename we parsed isn't empty, update our state
 		if (!filename.isEmpty()) {
-			// If we are initiating a memory transfer, we might want to keep the requested name
+			// If we are initiating a memory transfer, we might want to keep the requested
+			// name
 			// but usually the Host sends 'FT:DATA' for the actual data phase.
 			// Only update if it's not generic 'FT:DATA' or if we aren't in memory mode?
 			// Actually, just updating it is fine for logging.
@@ -3606,12 +2576,13 @@ public class TN3270Session extends JPanel implements KeyListener {
 			sendDCOpenResponse(true, 0);
 			return;
 		}
-		
+
 		ftIsMessage = false;
-		
-		// Determine Direction: 0x01 at offset+14 means Host GETs (Upload), otherwise Host PUTs (Download)
+
+		// Determine Direction: 0x01 at offset+14 means Host GETs (Upload), otherwise
+		// Host PUTs (Download)
 		boolean hostWillGet = (offset + 14 < data.length) && (data[offset + 14] == 0x01);
-		
+
 		try {
 			// --- FIX: Logic check for File vs Memory ---
 			// Only complain about missing currentFile if we are NOT doing a memory transfer
@@ -3667,11 +2638,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 					updateProgressDialog("Receiving data...", "Bytes: 0", 0);
 				}
 			}
-			
+
 			ftState = FileTransferState.TRANSFER_IN_PROGRESS;
 			blockSequence = 0;
 			sendDCOpenResponse(true, 0);
-			
+
 		} catch (IOException e) {
 			closeProgressDialog();
 			showMessageDialog("File error: " + e.getMessage(), "Error", true);
@@ -3855,7 +2826,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			showMessageDialog("Upload error", "Error", true);
 		}
 	}
-	
+
 	private void handleDCInsert(byte[] data, int offset, int length) {
 		if (ftIsMessage) {
 			if (blockSequence > 0) {
@@ -3882,7 +2853,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				}
 				closeProgressDialog();
 				boolean isError = message.contains("Error") || message.contains("TRANS13");
-				
+
 				// --- FIX: Bypass Dialog for Memory Transfers ---
 				if (isMemoryTransfer) {
 					if (transferCallback != null) {
@@ -3890,14 +2861,16 @@ public class TN3270Session extends JPanel implements KeyListener {
 							transferCallback.onError(message);
 						} else {
 							if (ftDirection == FileTransferDirection.DOWNLOAD) {
-								String res = "";
-								if (memoryDownloadBuffer != null) {
-									res = new String(memoryDownloadBuffer.toByteArray(), StandardCharsets.UTF_8);
-								}
-								//transferCallback.onDownloadComplete(res);
-								// UPDATED: Return raw bytes directly. 
-								// Fixes binary file corruption for Mainframe transfers too.
-								transferCallback.onDownloadComplete(memoryDownloadBuffer.toByteArray());
+								/*
+								 * String res = ""; if (memoryDownloadBuffer != null) { res = new
+								 * String(memoryDownloadBuffer.toByteArray(), StandardCharsets.UTF_8); } //
+								 * transferCallback.onDownloadComplete(res); // UPDATED: Return raw bytes
+								 * directly. // Fixes binary file corruption for Mainframe transfers too.
+								 * transferCallback.onDownloadComplete(memoryDownloadBuffer.toByteArray());
+								 */
+								byte[] xdata = (memoryDownloadBuffer != null) ? memoryDownloadBuffer.toByteArray()
+										: new byte[0];
+								transferCallback.onDownloadComplete(xdata);
 							} else {
 								transferCallback.onUploadComplete();
 							}
@@ -3918,7 +2891,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			}
 			return;
 		}
-		
+
 		// --- DATA BLOCK HANDLING (Bottom Half) ---
 		if (downloadStream == null) {
 			sendDCInsertResponse(false, 0x4700);
@@ -3949,7 +2922,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				transferredBytes += dataLen;
 				blockSequence++;
 				sendDCInsertResponse(true, 0);
-				
+
 				// Optional: Only update progress bar if we have a dialog open
 				if (progressDialog != null && progressDialog.isVisible()) {
 					updateProgressDialog("Downloading block " + blockSequence, "Bytes: " + transferredBytes,
@@ -3962,105 +2935,53 @@ public class TN3270Session extends JPanel implements KeyListener {
 			sendDCInsertResponse(false, 0x4700);
 		}
 	}
-/*
-	private void handleDCInsertOld(byte[] data, int offset, int length) {
-		if (ftIsMessage) {
-			if (blockSequence > 0) {
-				blockSequence++;
-				sendDCInsertResponse(true, 0);
-				return;
-			}
-			int markerOffset = offset + 7;
-			if (markerOffset + 2 >= data.length || data[markerOffset] != 0x61)
-				return;
-			int dataLen = (((data[markerOffset + 1] & 0xFF) << 8) | (data[markerOffset + 2] & 0xFF)) - 5;
-			if (dataLen > 0 && markerOffset + 3 + dataLen <= data.length) {
-				String message = new String(data, markerOffset + 3, dataLen);
-				// if (message.endsWith("$"))
-				// message = message.substring(0, message.length() - 1);
-				// FIX: Aggressively remove '$' from anywhere in the completion message
-				message = message.replace('$', ' ').trim();
-				blockSequence++;
-				sendDCInsertResponse(true, 0);
-				try {
-					if (downloadStream != null)
-						downloadStream.close();
-					if (uploadStream != null)
-						uploadStream.close();
-				} catch (Exception e) {
-				}
-				//
-			    // NEW: Handle Memory Completion
-			    if (isMemoryTransfer && transferCallback != null) {
-			        if (message.contains("Error") || message.contains("TRANS13")) {
-			            transferCallback.onError(message);
-			        } else {
-			            if (ftDirection == FileTransferDirection.DOWNLOAD) {
-			                // Convert the buffer to String
-			                String result = new String(memoryDownloadBuffer.toByteArray(), StandardCharsets.UTF_8);
-			                // Windows/Mainframe newline cleanup if needed
-			                transferCallback.onDownloadComplete(result); 
-			            } else {
-			                transferCallback.onUploadComplete();
-			            }
-			        }
-			        // Reset flag
-			        isMemoryTransfer = false;
-			        memoryUploadData = null;
-			        memoryDownloadBuffer = null;
-			        transferCallback = null;
-			    }
-				//
-				closeProgressDialog();
-				boolean isError = message.contains("Error") || message.contains("TRANS13");
-				showMessageDialog(message, isError ? "Transfer Error" : "Transfer Status", isError);
-				ftState = FileTransferState.IDLE;
-			}
-			return;
-		}
-		if (downloadStream == null) {
-			sendDCInsertResponse(false, 0x4700);
-			return;
-		}
-		int markerOffset = offset + 7;
-		if (markerOffset >= offset + length || data[markerOffset] != 0x61)
-			return;
-		try {
-			int dataLen = (((data[markerOffset + 1] & 0xFF) << 8) | (data[markerOffset + 2] & 0xFF)) - 5;
-			if (dataLen > 0) {
-				byte[] fileData = new byte[dataLen];
-				System.arraycopy(data, markerOffset + 3, fileData, 0, dataLen);
-				if (ftIsText) {
-					ByteArrayOutputStream clean = new ByteArrayOutputStream();
-					for (int i = 0; i < dataLen; i++) {
-						byte b = fileData[i];
-						if (b == 0x0D)
-							continue;
-						if (b == 0x0A)
-							clean.write('\n');
-						else if (b != 0x1A)
-							clean.write(b);
-					}
-					downloadStream.write(clean.toByteArray());
-				} else
-					downloadStream.write(fileData);
-				transferredBytes += dataLen;
-				blockSequence++;
-				sendDCInsertResponse(true, 0);
-				// updateProgressDialog("Downloading block " + blockSequence, "Bytes: " +
-				// transferredBytes);
-				// FIX: Pass 0 or current bytes to update (determinate bar won't move if
-				// indeterminate, which is fine)
-				updateProgressDialog("Downloading block " + blockSequence, "Bytes: " + transferredBytes,
-						(int) transferredBytes);
-			} else
-				sendDCInsertResponse(true, 0);
-		} catch (IOException e) {
-			closeProgressDialog();
-			sendDCInsertResponse(false, 0x4700);
-		}
-	}
-*/
+
+	/*
+	 * private void handleDCInsertOld(byte[] data, int offset, int length) { if
+	 * (ftIsMessage) { if (blockSequence > 0) { blockSequence++;
+	 * sendDCInsertResponse(true, 0); return; } int markerOffset = offset + 7; if
+	 * (markerOffset + 2 >= data.length || data[markerOffset] != 0x61) return; int
+	 * dataLen = (((data[markerOffset + 1] & 0xFF) << 8) | (data[markerOffset + 2] &
+	 * 0xFF)) - 5; if (dataLen > 0 && markerOffset + 3 + dataLen <= data.length) {
+	 * String message = new String(data, markerOffset + 3, dataLen); // if
+	 * (message.endsWith("$")) // message = message.substring(0, message.length() -
+	 * 1); // FIX: Aggressively remove '$' from anywhere in the completion message
+	 * message = message.replace('$', ' ').trim(); blockSequence++;
+	 * sendDCInsertResponse(true, 0); try { if (downloadStream != null)
+	 * downloadStream.close(); if (uploadStream != null) uploadStream.close(); }
+	 * catch (Exception e) { } // // NEW: Handle Memory Completion if
+	 * (isMemoryTransfer && transferCallback != null) { if
+	 * (message.contains("Error") || message.contains("TRANS13")) {
+	 * transferCallback.onError(message); } else { if (ftDirection ==
+	 * FileTransferDirection.DOWNLOAD) { // Convert the buffer to String String
+	 * result = new String(memoryDownloadBuffer.toByteArray(),
+	 * StandardCharsets.UTF_8); // Windows/Mainframe newline cleanup if needed
+	 * transferCallback.onDownloadComplete(result); } else {
+	 * transferCallback.onUploadComplete(); } } // Reset flag isMemoryTransfer =
+	 * false; memoryUploadData = null; memoryDownloadBuffer = null; transferCallback
+	 * = null; } // closeProgressDialog(); boolean isError =
+	 * message.contains("Error") || message.contains("TRANS13");
+	 * showMessageDialog(message, isError ? "Transfer Error" : "Transfer Status",
+	 * isError); ftState = FileTransferState.IDLE; } return; } if (downloadStream ==
+	 * null) { sendDCInsertResponse(false, 0x4700); return; } int markerOffset =
+	 * offset + 7; if (markerOffset >= offset + length || data[markerOffset] !=
+	 * 0x61) return; try { int dataLen = (((data[markerOffset + 1] & 0xFF) << 8) |
+	 * (data[markerOffset + 2] & 0xFF)) - 5; if (dataLen > 0) { byte[] fileData =
+	 * new byte[dataLen]; System.arraycopy(data, markerOffset + 3, fileData, 0,
+	 * dataLen); if (ftIsText) { ByteArrayOutputStream clean = new
+	 * ByteArrayOutputStream(); for (int i = 0; i < dataLen; i++) { byte b =
+	 * fileData[i]; if (b == 0x0D) continue; if (b == 0x0A) clean.write('\n'); else
+	 * if (b != 0x1A) clean.write(b); } downloadStream.write(clean.toByteArray()); }
+	 * else downloadStream.write(fileData); transferredBytes += dataLen;
+	 * blockSequence++; sendDCInsertResponse(true, 0); //
+	 * updateProgressDialog("Downloading block " + blockSequence, "Bytes: " + //
+	 * transferredBytes); // FIX: Pass 0 or current bytes to update (determinate bar
+	 * won't move if // indeterminate, which is fine)
+	 * updateProgressDialog("Downloading block " + blockSequence, "Bytes: " +
+	 * transferredBytes, (int) transferredBytes); } else sendDCInsertResponse(true,
+	 * 0); } catch (IOException e) { closeProgressDialog();
+	 * sendDCInsertResponse(false, 0x4700); } }
+	 */
 	private void sendDCOpenResponse(boolean success, int errorCode) {
 		sendResp((byte) DC_OPEN, success, errorCode);
 	}
@@ -4362,16 +3283,91 @@ public class TN3270Session extends JPanel implements KeyListener {
 				tabToNextField();
 			return;
 		case KeyEvent.VK_BACK_SPACE:
-			int cPos = screenModel.getCursorPos();
-			if (!screenModel.isProtected(cPos)) {
-				moveCursorX(-1);
-				cPos = screenModel.getCursorPos();
-				if (!screenModel.isProtected(cPos)) {
-					screenModel.setChar(cPos, ' ');
-					screenModel.setModified(cPos);
-					terminalPanel.repaint();
-				}
+			/*
+			 * int cPos = screenModel.getCursorPos(); if (!screenModel.isProtected(cPos)) {
+			 * moveCursorX(-1); cPos = screenModel.getCursorPos(); if
+			 * (!screenModel.isProtected(cPos)) { screenModel.setChar(cPos, ' ');
+			 * screenModel.setModified(cPos); terminalPanel.repaint(); } } return;
+			 */
+			/*
+			 * // Bug Fix #1 (Corrected): Check destination protection BEFORE moving if
+			 * (keyboardLocked || !connected) return;
+			 * 
+			 * int currentPos = screenModel.getCursorPos(); int size =
+			 * screenModel.getSize();
+			 * 
+			 * // 1. Calculate the target position to the left // Note: We handle wrapping
+			 * manually here to check protection int newPos = (currentPos - 1 + size) %
+			 * size;
+			 * 
+			 * // 2. CRITICAL CHECK: Is the target position protected? // If it is (e.g.,
+			 * it's an attribute byte or a label), we must NOT move or delete. if
+			 * (screenModel.isProtected(newPos)) { if (enableSound)
+			 * Toolkit.getDefaultToolkit().beep(); return; }
+			 * 
+			 * // 3. Move Cursor screenModel.setCursorPos(newPos);
+			 * 
+			 * // 4. Shift characters left (Delete logic) int fieldEnd =
+			 * screenModel.findNextField(newPos); int p = newPos; while (true) { int next =
+			 * (p + 1) % size;
+			 * 
+			 * // Stop if we hit the start of the next field if (next == fieldEnd) { // Fill
+			 * the last character of the field with a null screenModel.setChar(p, '\0');
+			 * break; }
+			 * 
+			 * // Pull the character from the right screenModel.setChar(p,
+			 * screenModel.getChar(next)); p = next; }
+			 * 
+			 * screenModel.setModified(newPos); terminalPanel.repaint(); updateStatusBar();
+			 * return;
+			 */
+			// Bug Fix #1 (Revised): Check for Field Start (Attribute Byte) collision
+			if (keyboardLocked || !connected)
+				return;
+
+			int currentPos = screenModel.getCursorPos();
+			int size = screenModel.getSize();
+
+			// 1. Calculate the target position to the left
+			int newPos = (currentPos - 1 + size) % size;
+
+			// 2. CRITICAL CHECK:
+			// We cannot backspace if the position to the left is:
+			// a) Protected (part of a protected field)
+			// b) An Attribute Byte (the start of ANY field). You cannot backspace onto an
+			// attribute.
+			if (screenModel.isProtected(newPos) || screenModel.isFieldStart(newPos)) {
+				if (enableSound)
+					Toolkit.getDefaultToolkit().beep();
+				return;
 			}
+
+			// 3. Move Cursor
+			screenModel.setCursorPos(newPos);
+
+			// 4. Shift characters left (Delete logic)
+			// We start shifting FROM the new cursor position (overwriting the char we just
+			// backspaced onto)
+			int fieldEnd = screenModel.findNextField(newPos);
+			int p = newPos;
+			while (true) {
+				int next = (p + 1) % size;
+
+				// Stop if we hit the start of the next field
+				if (next == fieldEnd) {
+					// Fill the last character of the field with a null
+					screenModel.setChar(p, '\0');
+					break;
+				}
+
+				// Pull the character from the right
+				screenModel.setChar(p, screenModel.getChar(next));
+				p = next;
+			}
+
+			screenModel.setModified(newPos);
+			terminalPanel.repaint();
+			updateStatusBar();
 			return;
 		}
 	}
@@ -4419,6 +3415,46 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	private void moveCursorX(int delta) {
+		// Bug Fix #2: Wrap cursor linearly across the entire screen.
+		// This ensures that moving Right at the end of a line wraps to the start
+		// of the next line, and moving Right at the bottom-right of the screen
+		// wraps to the top-left (Row 1, Col 1).
+
+		int size = screenModel.getSize();
+
+		// 1. Calculate new absolute position
+		// Use modulo to handle the wrap-around at the very end of the buffer
+		int newPos = (screenModel.getCursorPos() + delta) % size;
+
+		// 2. Handle Java's modulo behavior for negative numbers
+		// (If we are at 0 and move -1, Java returns -1, we want size-1)
+		if (newPos < 0) {
+			newPos += size;
+		}
+
+		// 3. Apply
+		screenModel.setCursorPos(newPos);
+		terminalPanel.repaint();
+		updateStatusBar();
+	}
+
+	private void moveCursorXPrior(int delta) {
+		// Bug Fix #2: Wrap to next line when moving right, prev line when moving left
+		int size = screenModel.getSize();
+
+		// Add delta to current position (modulo size handles wrapping lines)
+		int newPos = (screenModel.getCursorPos() + delta) % size;
+
+		// Handle negative results (Java modulo can return negative for negative inputs)
+		if (newPos < 0)
+			newPos += size;
+
+		screenModel.setCursorPos(newPos);
+		terminalPanel.repaint();
+		updateStatusBar();
+	}
+
+	private void moveCursorXOld(int delta) {
 		int cols = screenModel.getCols();
 		int currentRow = screenModel.getCursorPos() / cols;
 		int currentCol = screenModel.getCursorPos() % cols;
@@ -4564,106 +3600,107 @@ public class TN3270Session extends JPanel implements KeyListener {
 	 * user's screen resolution to ensure the window doesn't grow beyond the monitor
 	 * edges.
 	 * 
-	 * Regression: Ghost Scrollbars on Session Start/Clear
-     * Issue: Vertical and horizontal scrollbars were appearing immediately after 
-     * a new session connected or after a CLEAR key was pressed, even though the window 
-     * appeared large enough to fit the content.
-     * Cause: A race condition between Java Swing's layout manager and the High-DPI font 
-     * rendering. The pack() method calculated the window size using integer math, while 
-     * the text rendering used fractional metrics. This often resulted in the content being 
-     * 1-2 pixels larger than the calculated viewport, triggering the JScrollPane to display 
-     * scrollbars.
-     * Fix: Updated TN3270Session.snapWindow() to temporarily disable scrollbar policies during 
-     * the layout calculation and added a 4-pixel safety buffer to the final window dimensions 
-     * to absorb rounding errors. Added explicit validate() calls during session initialization 
-     * to ensure the layout is current before sizing.
+	 * Regression: Ghost Scrollbars on Session Start/Clear Issue: Vertical and
+	 * horizontal scrollbars were appearing immediately after a new session
+	 * connected or after a CLEAR key was pressed, even though the window appeared
+	 * large enough to fit the content. Cause: A race condition between Java Swing's
+	 * layout manager and the High-DPI font rendering. The pack() method calculated
+	 * the window size using integer math, while the text rendering used fractional
+	 * metrics. This often resulted in the content being 1-2 pixels larger than the
+	 * calculated viewport, triggering the JScrollPane to display scrollbars. Fix:
+	 * Updated TN3270Session.snapWindow() to temporarily disable scrollbar policies
+	 * during the layout calculation and added a 4-pixel safety buffer to the final
+	 * window dimensions to absorb rounding errors. Added explicit validate() calls
+	 * during session initialization to ensure the layout is current before sizing.
 	 */
 	public void snapWindow() {
-        Window window = SwingUtilities.getWindowAncestor(this);
-        if (window == null || !window.isDisplayable()) return;
+		Window window = SwingUtilities.getWindowAncestor(this);
+		if (window == null || !window.isDisplayable())
+			return;
 
-        isProgrammaticResize = true;
-        try {
-            // 1. SAVE & DISABLE POLICIES
-            // We force scrollbars to NEVER so pack() calculates the tightest possible 
-            // window size around the content without reserving space for bars.
-            int vPolicy = scrollPane.getVerticalScrollBarPolicy();
-            int hPolicy = scrollPane.getHorizontalScrollBarPolicy();
-            
-            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
-            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-            
-            // 2. PACK (Calculate size based purely on content)
-            window.pack();
-            
-            // 3. RESTORE POLICIES
-            scrollPane.setVerticalScrollBarPolicy(vPolicy);
-            scrollPane.setHorizontalScrollBarPolicy(hPolicy);
+		isProgrammaticResize = true;
+		try {
+			// 1. SAVE & DISABLE POLICIES
+			// We force scrollbars to NEVER so pack() calculates the tightest possible
+			// window size around the content without reserving space for bars.
+			int vPolicy = scrollPane.getVerticalScrollBarPolicy();
+			int hPolicy = scrollPane.getHorizontalScrollBarPolicy();
 
-            // 4. ADD SAFETY BUFFER & CLAMP
-            // We add +4 pixels (width/height) to handle High-DPI font rounding errors.
-            // This ensures the viewport is slightly larger than the content, 
-            // preventing "AS_NEEDED" scrollbars from appearing.
-            int w = window.getWidth() + 4;
-            int h = window.getHeight() + 4;
+			scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
+			scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-            GraphicsConfiguration gc = window.getGraphicsConfiguration();
-            Rectangle screenBounds = gc.getBounds();
-            Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+			// 2. PACK (Calculate size based purely on content)
+			window.pack();
 
-            int maxWidth = screenBounds.width - screenInsets.left - screenInsets.right;
-            int maxHeight = screenBounds.height - screenInsets.top - screenInsets.bottom;
+			// 3. RESTORE POLICIES
+			scrollPane.setVerticalScrollBarPolicy(vPolicy);
+			scrollPane.setHorizontalScrollBarPolicy(hPolicy);
 
-            w = Math.min(w, maxWidth);
-            h = Math.min(h, maxHeight);
+			// 4. ADD SAFETY BUFFER & CLAMP
+			// We add +4 pixels (width/height) to handle High-DPI font rounding errors.
+			// This ensures the viewport is slightly larger than the content,
+			// preventing "AS_NEEDED" scrollbars from appearing.
+			int w = window.getWidth() + 4;
+			int h = window.getHeight() + 4;
 
-            // 5. APPLY
-            if (w != window.getWidth() || h != window.getHeight()) {
-                window.setSize(w, h);
-            }
-        } catch (Exception e) {
-            // Ignore race conditions during init
-        } finally {
-            SwingUtilities.invokeLater(() -> isProgrammaticResize = false);
-        }
-    }
-	
+			GraphicsConfiguration gc = window.getGraphicsConfiguration();
+			Rectangle screenBounds = gc.getBounds();
+			Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+
+			int maxWidth = screenBounds.width - screenInsets.left - screenInsets.right;
+			int maxHeight = screenBounds.height - screenInsets.top - screenInsets.bottom;
+
+			w = Math.min(w, maxWidth);
+			h = Math.min(h, maxHeight);
+
+			// 5. APPLY
+			if (w != window.getWidth() || h != window.getHeight()) {
+				window.setSize(w, h);
+			}
+		} catch (Exception e) {
+			// Ignore race conditions during init
+		} finally {
+			SwingUtilities.invokeLater(() -> isProgrammaticResize = false);
+		}
+	}
+
 	public void snapWindowPrior() {
-        Window window = SwingUtilities.getWindowAncestor(this);
-        if (window == null || !window.isDisplayable()) return;
+		Window window = SwingUtilities.getWindowAncestor(this);
+		if (window == null || !window.isDisplayable())
+			return;
 
-        isProgrammaticResize = true;
-        try {
-            // 1. Pack to preferred size (Calculated by Layout Manager)
-            window.pack(); 
+		isProgrammaticResize = true;
+		try {
+			// 1. Pack to preferred size (Calculated by Layout Manager)
+			window.pack();
 
-            // 2. CRITICAL FIX: Add a tiny buffer (2px) to width/height.
-            // This absorbs high-DPI font rounding errors that cause 
-            // the JScrollPane to think it needs scrollbars.
-            int w = window.getWidth() + 2;
-            int h = window.getHeight() + 2;
+			// 2. CRITICAL FIX: Add a tiny buffer (2px) to width/height.
+			// This absorbs high-DPI font rounding errors that cause
+			// the JScrollPane to think it needs scrollbars.
+			int w = window.getWidth() + 2;
+			int h = window.getHeight() + 2;
 
-            // 3. Clamp to Screen Bounds (Existing logic)
-            GraphicsConfiguration gc = window.getGraphicsConfiguration();
-            Rectangle screenBounds = gc.getBounds();
-            Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+			// 3. Clamp to Screen Bounds (Existing logic)
+			GraphicsConfiguration gc = window.getGraphicsConfiguration();
+			Rectangle screenBounds = gc.getBounds();
+			Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
 
-            int maxWidth = screenBounds.width - screenInsets.left - screenInsets.right;
-            int maxHeight = screenBounds.height - screenInsets.top - screenInsets.bottom;
+			int maxWidth = screenBounds.width - screenInsets.left - screenInsets.right;
+			int maxHeight = screenBounds.height - screenInsets.top - screenInsets.bottom;
 
-            w = Math.min(w, maxWidth);
-            h = Math.min(h, maxHeight);
+			w = Math.min(w, maxWidth);
+			h = Math.min(h, maxHeight);
 
-            // 4. Apply Size
-            window.setSize(w, h);
-            
-        } catch (Exception e) {
-            // Ignore race conditions during init
-        } finally {
-            SwingUtilities.invokeLater(() -> isProgrammaticResize = false);
-        }
-    }
-	
+			// 4. Apply Size
+			window.setSize(w, h);
+
+		} catch (Exception e) {
+			// Ignore race conditions during init
+		} finally {
+			SwingUtilities.invokeLater(() -> isProgrammaticResize = false);
+		}
+	}
+
 	public void snapWindowOld() {
 		Window window = SwingUtilities.getWindowAncestor(this);
 		if (window == null || !window.isDisplayable())
@@ -4755,7 +3792,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		}
 		terminalPanel.repaint();
 	}
-	
+
 	public void showFontSizeDialog() {
 		JDialog dialog = new JDialog(getParentFrame(), "Terminal Font Size", true);
 		dialog.setLayout(new BorderLayout(10, 10));
@@ -4786,7 +3823,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 		JButton ok = new JButton("Apply");
 		JButton cancel = new JButton("Cancel");
-		
+
 		// --- FIX: Wrap logic in try-finally to ensure dialog closes ---
 		ok.addActionListener(e -> {
 			try {
@@ -4799,7 +3836,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				dialog.dispose();
 			}
 		});
-		
+
 		cancel.addActionListener(e -> dialog.dispose());
 		btnPanel.add(cancel);
 		btnPanel.add(ok);
@@ -4810,8 +3847,552 @@ public class TN3270Session extends JPanel implements KeyListener {
 		dialog.setLocationRelativeTo(getParentFrame());
 		dialog.setVisible(true);
 	}
-	
+
+	@SuppressWarnings("unchecked")
 	public void showColorSchemeDialog() {
+		JDialog dialog = new JDialog(getParentFrame(), "Color Settings", true);
+		dialog.setLayout(new BorderLayout());
+
+		JPanel mainPanel = new JPanel(new GridBagLayout());
+		mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+		JScrollPane scrollWrapper = new JScrollPane(mainPanel);
+		scrollWrapper.setBorder(null);
+		scrollWrapper.getVerticalScrollBar().setUnitIncrement(16);
+
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.insets = new Insets(5, 5, 5, 5);
+		gbc.weightx = 1.0;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+
+		// ==========================================
+		// 1. PRESETS & SAVING SECTION
+		// ==========================================
+		/*
+		 * JPanel presetPanel = new JPanel(new BorderLayout(5, 0));
+		 * presetPanel.setBorder(BorderFactory.createTitledBorder("Themes"));
+		 * 
+		 * JComboBox<String> schemeBox = new JComboBox<>(); // Sort keys to make finding
+		 * schemes easier
+		 * COLOR_SCHEMES.keySet().stream().sorted().forEach(schemeBox::addItem);
+		 * 
+		 * JButton applyPreset = new JButton("Load"); applyPreset.addActionListener(e ->
+		 * { applyColorScheme((String) schemeBox.getSelectedItem()); // Repaint to show
+		 * changes immediately, but keep dialog open terminalPanel.repaint(); });
+		 * 
+		 * // NEW: Save As Button JButton savePreset = new JButton("Save As...");
+		 * savePreset.addActionListener(e -> { String name =
+		 * JOptionPane.showInputDialog(dialog, "Enter a name for this color scheme:",
+		 * "Save Scheme", JOptionPane.PLAIN_MESSAGE); if (name != null &&
+		 * !name.trim().isEmpty()) { name = name.trim(); // 1. Capture current state
+		 * ColorScheme newScheme = new ColorScheme( screenModel.getScreenBackground(),
+		 * screenModel.getDefaultForeground(), screenModel.getCursorColor(),
+		 * screenModel.getPalette().clone() // Deep copy the array );
+		 * 
+		 * // 2. Update Memory COLOR_SCHEMES.put(name, newScheme);
+		 * 
+		 * // 3. Persist to Disk (Read-Modify-Write pattern) try { Map<String,
+		 * ColorScheme> customSchemes = new HashMap<>(); File f = new File(COLORS_FILE);
+		 * if (f.exists()) { try (ObjectInputStream ois = new ObjectInputStream(new
+		 * FileInputStream(f))) { customSchemes = (Map<String, ColorScheme>)
+		 * ois.readObject(); } catch (Exception ex) {} } customSchemes.put(name,
+		 * newScheme);
+		 * 
+		 * try (ObjectOutputStream oos = new ObjectOutputStream(new
+		 * FileOutputStream(f))) { oos.writeObject(customSchemes); }
+		 * 
+		 * // 4. Update UI if
+		 * (((DefaultComboBoxModel<String>)schemeBox.getModel()).getIndexOf(name) == -1)
+		 * { schemeBox.addItem(name); } schemeBox.setSelectedItem(name);
+		 * JOptionPane.showMessageDialog(dialog, "Scheme '" + name +
+		 * "' saved successfully.");
+		 * 
+		 * } catch (Exception ex) { JOptionPane.showMessageDialog(dialog,
+		 * "Error saving scheme: " + ex.getMessage(), "Error",
+		 * JOptionPane.ERROR_MESSAGE); } } });
+		 * 
+		 * JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		 * btnPanel.add(applyPreset); btnPanel.add(Box.createHorizontalStrut(5));
+		 * btnPanel.add(savePreset);
+		 * 
+		 * presetPanel.add(schemeBox, BorderLayout.CENTER); presetPanel.add(btnPanel,
+		 * BorderLayout.EAST);
+		 * 
+		 * mainPanel.add(presetPanel, gbc);
+		 */
+
+		// ==========================================
+		// 1. PRESETS & SAVING SECTION
+		// ==========================================
+		JPanel presetPanel = new JPanel(new BorderLayout(5, 0));
+		presetPanel.setBorder(BorderFactory.createTitledBorder("Themes"));
+
+		JComboBox<String> schemeBox = new JComboBox<>();
+		// Sort keys to make finding schemes easier
+		COLOR_SCHEMES.keySet().stream().sorted().forEach(schemeBox::addItem);
+
+		JButton applyPreset = new JButton("Load");
+		applyPreset.addActionListener(e -> {
+			applyColorScheme((String) schemeBox.getSelectedItem());
+			terminalPanel.repaint();
+		});
+
+		// NEW: Set Default Button
+		JButton setDefaultBtn = new JButton("Set Default");
+		setDefaultBtn.addActionListener(e -> {
+			String selected = (String) schemeBox.getSelectedItem();
+			try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(DEFAULT_SCHEME_FILE))) {
+				pw.println(selected);
+				JOptionPane.showMessageDialog(dialog,
+						"'" + selected
+								+ "' is now the default color scheme.\nIt will load automatically for new sessions.",
+						"Default Saved", JOptionPane.INFORMATION_MESSAGE);
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(dialog, "Failed to save default: " + ex.getMessage(), "Error",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		});
+
+		JButton savePreset = new JButton("Save As...");
+		savePreset.addActionListener(e -> {
+			String name = JOptionPane.showInputDialog(dialog, "Enter a name for this color scheme:", "Save Scheme",
+					JOptionPane.PLAIN_MESSAGE);
+			if (name != null && !name.trim().isEmpty()) {
+				name = name.trim();
+				// 1. Capture current state
+				ColorScheme newScheme = new ColorScheme(screenModel.getScreenBackground(),
+						screenModel.getDefaultForeground(), screenModel.getCursorColor(),
+						screenModel.getPalette().clone());
+
+				// 2. Update Memory
+				COLOR_SCHEMES.put(name, newScheme);
+
+				// 3. Persist to Disk
+				try {
+					Map<String, ColorScheme> customSchemes = new HashMap<>();
+					File f = new File(COLORS_FILE);
+					if (f.exists()) {
+						try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f))) {
+							customSchemes = (Map<String, ColorScheme>) ois.readObject();
+						} catch (Exception ex) {
+						}
+					}
+					customSchemes.put(name, newScheme);
+					try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(f))) {
+						oos.writeObject(customSchemes);
+					}
+
+					// 4. Update UI
+					if (((DefaultComboBoxModel<String>) schemeBox.getModel()).getIndexOf(name) == -1) {
+						schemeBox.addItem(name);
+					}
+					schemeBox.setSelectedItem(name);
+					JOptionPane.showMessageDialog(dialog, "Scheme '" + name + "' saved successfully.");
+
+				} catch (Exception ex) {
+					JOptionPane.showMessageDialog(dialog, "Error saving scheme: " + ex.getMessage(), "Error",
+							JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
+
+		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+		btnPanel.add(applyPreset);
+		btnPanel.add(setDefaultBtn); // Add the new button here
+		btnPanel.add(savePreset);
+
+		presetPanel.add(schemeBox, BorderLayout.CENTER);
+		presetPanel.add(btnPanel, BorderLayout.EAST);
+
+		mainPanel.add(presetPanel, gbc);
+
+		// ==========================================
+		// 2. GLOBAL COLORS
+		// ==========================================
+		gbc.gridy++;
+		JPanel globalPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+		globalPanel.setBorder(BorderFactory.createTitledBorder("Global Settings"));
+
+		// Helper for Custom Color Dialogs
+		java.awt.event.ActionListener colorEditor = evt -> {
+			JButton source = (JButton) evt.getSource();
+			String title = source.getText();
+			Color initial;
+
+			if (title.equals("Background"))
+				initial = screenModel.getScreenBackground();
+			else if (title.equals("Default Text"))
+				initial = screenModel.getDefaultForeground();
+			else
+				initial = screenModel.getCursorColor();
+
+			// Use the CUSTOM PREVIEW logic for Globals too
+			JColorChooser chooser = new JColorChooser(initial);
+			JPanel customPreview = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER));
+			customPreview.setBackground(Color.BLACK);
+			customPreview.setPreferredSize(new Dimension(300, 60));
+
+			JLabel previewLabel = new JLabel("Sample Text 123");
+			previewLabel.setFont(new Font("Monospaced", Font.BOLD, 16));
+			// If editing Background, we change the panel BG. If Text, we change Label FG.
+			boolean isBgEdit = title.equals("Background");
+
+			if (isBgEdit) {
+				previewLabel.setForeground(Color.GREEN);
+				customPreview.setBackground(initial);
+			} else {
+				previewLabel.setForeground(initial);
+				// If editing cursor/text, ensure background is distinct
+				customPreview.setBackground(screenModel.getScreenBackground());
+			}
+
+			customPreview.add(previewLabel);
+			chooser.setPreviewPanel(customPreview);
+
+			chooser.getSelectionModel().addChangeListener(e -> {
+				if (isBgEdit)
+					customPreview.setBackground(chooser.getColor());
+				else
+					previewLabel.setForeground(chooser.getColor());
+			});
+
+			JDialog d = JColorChooser.createDialog(dialog, "Edit " + title, true, chooser, e -> {
+				Color c = chooser.getColor();
+				if (c != null) {
+					if (isBgEdit) {
+						screenModel.setScreenBackground(c);
+						terminalPanel.setBackground(c);
+						if (scrollPane != null && scrollPane.getViewport() != null)
+							scrollPane.getViewport().setBackground(c);
+					} else if (title.equals("Default Text")) {
+						screenModel.setDefaultForeground(c);
+						terminalPanel.setForeground(c);
+					} else {
+						screenModel.setCursorColor(c);
+					}
+					terminalPanel.repaint();
+				}
+			}, null);
+			d.setVisible(true);
+		};
+
+		JButton btnBg = new JButton("Background");
+		btnBg.addActionListener(colorEditor);
+		JButton btnFg = new JButton("Default Text");
+		btnFg.addActionListener(colorEditor);
+		JButton btnCur = new JButton("Cursor");
+		btnCur.addActionListener(colorEditor);
+
+		globalPanel.add(btnBg);
+		globalPanel.add(btnFg);
+		globalPanel.add(btnCur);
+		mainPanel.add(globalPanel, gbc);
+
+		// ==========================================
+		// 3. 3270 PALETTE TUNER
+		// ==========================================
+		gbc.gridy++;
+		JPanel palettePanel = new JPanel(new GridBagLayout());
+		palettePanel.setBorder(BorderFactory.createTitledBorder("3270 Extended Palette (Host Colors)"));
+
+		String[] colorNames = { "N/A", "Blue", "Red", "Pink", "Green", "Turquoise", "Yellow", "White" };
+		Color[] currentPalette = screenModel.getPalette();
+
+		GridBagConstraints pGbc = new GridBagConstraints();
+		pGbc.fill = GridBagConstraints.HORIZONTAL;
+		pGbc.insets = new Insets(2, 2, 2, 2);
+
+		for (int i = 1; i <= 7; i++) {
+			final int colorIndex = i;
+			pGbc.gridy = i - 1;
+
+			// Label
+			pGbc.gridx = 0;
+			pGbc.weightx = 0.0;
+			palettePanel.add(new JLabel(colorNames[i] + ": "), pGbc);
+
+			// Preview (Text on Black)
+			pGbc.gridx = 1;
+			pGbc.weightx = 1.0;
+			JLabel preview = new JLabel(" THE QUICK BROWN FOX ", SwingConstants.CENTER);
+			preview.setOpaque(true);
+			preview.setBackground(Color.BLACK);
+			preview.setForeground(currentPalette[i]);
+			preview.setBorder(new LineBorder(Color.GRAY));
+			palettePanel.add(preview, pGbc);
+
+			// Edit Button
+			pGbc.gridx = 2;
+			pGbc.weightx = 0.0;
+			JButton changeBtn = new JButton("Edit...");
+			changeBtn.setPreferredSize(new Dimension(70, 24));
+
+			changeBtn.addActionListener(e -> {
+				Color initial = screenModel.getPalette()[colorIndex];
+
+				// Custom Preview Logic (Corrected per your request)
+				JColorChooser chooser = new JColorChooser(initial);
+				JPanel customPreview = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER));
+				customPreview.setBackground(Color.BLACK);
+				customPreview.setPreferredSize(new Dimension(300, 60));
+
+				JLabel pLabel = new JLabel("Sample Text 123");
+				pLabel.setFont(new Font("Monospaced", Font.BOLD, 16));
+				pLabel.setForeground(initial);
+
+				customPreview.add(pLabel);
+				chooser.setPreviewPanel(customPreview);
+
+				chooser.getSelectionModel().addChangeListener(evt -> {
+					pLabel.setForeground(chooser.getColor());
+				});
+
+				java.awt.event.ActionListener okAction = evt -> {
+					Color newC = chooser.getColor();
+					if (newC != null) {
+						screenModel.getPalette()[colorIndex] = newC;
+						preview.setForeground(newC);
+						terminalPanel.repaint();
+					}
+				};
+
+				JDialog d = JColorChooser.createDialog(dialog, "Edit " + colorNames[colorIndex], true, chooser,
+						okAction, null);
+				d.setVisible(true);
+			});
+			palettePanel.add(changeBtn, pGbc);
+		}
+
+		mainPanel.add(palettePanel, gbc);
+
+		// Footer
+		JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton close = new JButton("Close");
+		close.addActionListener(e -> dialog.dispose());
+		footer.add(close);
+
+		dialog.add(scrollWrapper, BorderLayout.CENTER);
+		dialog.add(footer, BorderLayout.SOUTH);
+
+		dialog.pack();
+		dialog.setSize(new Dimension(dialog.getWidth() + 30, Math.min(650, dialog.getHeight())));
+		dialog.setLocationRelativeTo(getParentFrame());
+		dialog.setVisible(true);
+	}
+
+	public void showColorSchemeDialogPrior() {
+		JDialog dialog = new JDialog(getParentFrame(), "Color Settings", true);
+		dialog.setLayout(new BorderLayout());
+
+		// Main Scrollable Container (in case the list gets long on small screens)
+		JPanel mainPanel = new JPanel(new GridBagLayout());
+		mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+		JScrollPane scrollWrapper = new JScrollPane(mainPanel);
+		scrollWrapper.setBorder(null);
+		scrollWrapper.getVerticalScrollBar().setUnitIncrement(16);
+
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.insets = new Insets(5, 5, 5, 5);
+		gbc.weightx = 1.0;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+
+		// ==========================================
+		// 1. PRESETS SECTION
+		// ==========================================
+		JPanel presetPanel = new JPanel(new BorderLayout(5, 0));
+		presetPanel.setBorder(BorderFactory.createTitledBorder("Themes"));
+
+		JComboBox<String> schemeBox = new JComboBox<>();
+		schemeBox.addItem("Green on Black (Classic)");
+		schemeBox.addItem("White on Black");
+		schemeBox.addItem("Amber on Black");
+		schemeBox.addItem("Green on Dark Green");
+		schemeBox.addItem("IBM 3270 Blue");
+		schemeBox.addItem("Solarized Dark");
+
+		JButton applyPreset = new JButton("Load Theme");
+		applyPreset.addActionListener(e -> {
+			applyColorScheme((String) schemeBox.getSelectedItem());
+			// We must close and reopen (or refresh) the dialog to reflect
+			// the new theme colors in the customizers below, but simply
+			// repainting the terminal is enough for the user.
+			dialog.dispose();
+		});
+
+		presetPanel.add(schemeBox, BorderLayout.CENTER);
+		presetPanel.add(applyPreset, BorderLayout.EAST);
+
+		mainPanel.add(presetPanel, gbc);
+
+		// ==========================================
+		// 2. GLOBAL COLORS (Background/Cursor)
+		// ==========================================
+		gbc.gridy++;
+		JPanel globalPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+		globalPanel.setBorder(BorderFactory.createTitledBorder("Global Settings"));
+
+		JButton btnBg = new JButton("Background");
+		btnBg.addActionListener(e -> {
+			Color newC = JColorChooser.showDialog(dialog, "Screen Background", screenModel.getScreenBackground());
+			if (newC != null) {
+				screenModel.setScreenBackground(newC);
+				terminalPanel.setBackground(newC);
+				if (scrollPane != null && scrollPane.getViewport() != null)
+					scrollPane.getViewport().setBackground(newC);
+				terminalPanel.repaint();
+			}
+		});
+
+		JButton btnFg = new JButton("Default Text");
+		btnFg.addActionListener(e -> {
+			Color newC = JColorChooser.showDialog(dialog, "Default Text (Unformatted)",
+					screenModel.getDefaultForeground());
+			if (newC != null) {
+				screenModel.setDefaultForeground(newC);
+				terminalPanel.setForeground(newC);
+				terminalPanel.repaint();
+			}
+		});
+
+		JButton btnCur = new JButton("Cursor");
+		btnCur.addActionListener(e -> {
+			Color newC = JColorChooser.showDialog(dialog, "Cursor Color", screenModel.getCursorColor());
+			if (newC != null) {
+				screenModel.setCursorColor(newC);
+				terminalPanel.repaint();
+			}
+		});
+
+		globalPanel.add(btnBg);
+		globalPanel.add(btnFg);
+		globalPanel.add(btnCur);
+
+		mainPanel.add(globalPanel, gbc);
+
+		// ==========================================
+		// 3. 3270 PALETTE TUNER (The Fix)
+		// ==========================================
+		gbc.gridy++;
+		JPanel palettePanel = new JPanel(new GridBagLayout());
+		palettePanel.setBorder(BorderFactory.createTitledBorder("3270 Extended Palette (Host Colors)"));
+
+		String[] colorNames = { "N/A", "Blue", "Red", "Pink", "Green", "Turquoise", "Yellow", "White" };
+
+		// We iterate 1-7 because 3270 colors are 1-based indices in the palette array
+		GridBagConstraints pGbc = new GridBagConstraints();
+		pGbc.fill = GridBagConstraints.HORIZONTAL;
+		pGbc.insets = new Insets(2, 2, 2, 2);
+		pGbc.weightx = 1.0;
+
+		Color[] currentPalette = screenModel.getPalette();
+
+		for (int i = 1; i <= 7; i++) {
+			final int colorIndex = i;
+			pGbc.gridy = i - 1;
+
+			// A. Color Name
+			pGbc.gridx = 0;
+			pGbc.weightx = 0.0;
+			palettePanel.add(new JLabel(colorNames[i] + ":  "), pGbc);
+
+			// B. Preview Label (Black Background to test contrast)
+			pGbc.gridx = 1;
+			pGbc.weightx = 1.0;
+			JLabel preview = new JLabel(" THE QUICK BROWN FOX ", JLabel.CENTER);
+			preview.setOpaque(true);
+			preview.setBackground(Color.BLACK);
+			preview.setForeground(currentPalette[i]);
+			preview.setBorder(new LineBorder(Color.GRAY));
+			palettePanel.add(preview, pGbc);
+
+			// C. Change Button
+			pGbc.gridx = 2;
+			pGbc.weightx = 0.0;
+			JButton changeBtn = new JButton("Edit...");
+			changeBtn.setPreferredSize(new Dimension(70, 24));
+			/*
+			 * changeBtn.addActionListener(e -> { Color initial =
+			 * screenModel.getPalette()[colorIndex]; Color newC =
+			 * JColorChooser.showDialog(dialog, "Edit " + colorNames[colorIndex], initial);
+			 * 
+			 * if (newC != null) { // 1. Update Model screenModel.getPalette()[colorIndex] =
+			 * newC;
+			 * 
+			 * // 2. Update Preview in Dialog preview.setForeground(newC);
+			 * 
+			 * // 3. Repaint Main Terminal immediately so user can see context
+			 * terminalPanel.repaint(); } }); palettePanel.add(changeBtn, pGbc);
+			 */
+			changeBtn.addActionListener(e -> {
+				Color initial = screenModel.getPalette()[colorIndex];
+
+				// 1. Create a custom JColorChooser
+				JColorChooser chooser = new JColorChooser(initial);
+
+				// 2. Create a Custom Preview Panel (Text on Black)
+				JPanel customPreview = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER));
+				customPreview.setBackground(Color.BLACK);
+				customPreview.setPreferredSize(new Dimension(300, 60));
+
+				JLabel previewLabel = new JLabel("Sample Text in 3270 Mode");
+				previewLabel.setForeground(initial);
+				previewLabel.setFont(new Font("Monospaced", Font.BOLD, 16));
+
+				customPreview.add(previewLabel);
+				chooser.setPreviewPanel(customPreview);
+
+				// 3. Update the preview text color dynamically as the user picks colors
+				chooser.getSelectionModel().addChangeListener(evt -> {
+					previewLabel.setForeground(chooser.getColor());
+				});
+
+				// 4. Create the Dialog wrapper
+				// We use an ActionListener for the "OK" button
+				java.awt.event.ActionListener okActionListener = evt -> {
+					Color newC = chooser.getColor();
+					if (newC != null) {
+						// Update Model
+						screenModel.getPalette()[colorIndex] = newC;
+						// Update the Preview in the Main List (parent dialog)
+						preview.setForeground(newC);
+						// Repaint Terminal
+						terminalPanel.repaint();
+					}
+				};
+
+				JDialog colorDialog = JColorChooser.createDialog(dialog, "Edit " + colorNames[colorIndex], true, // modal
+						chooser, okActionListener, null // cancel listener (default is close)
+				);
+
+				colorDialog.setVisible(true);
+			});
+			palettePanel.add(changeBtn, pGbc);
+		}
+
+		mainPanel.add(palettePanel, gbc);
+
+		// Footer
+		JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton close = new JButton("Close");
+		close.addActionListener(e -> dialog.dispose());
+		footer.add(close);
+
+		dialog.add(scrollWrapper, BorderLayout.CENTER);
+		dialog.add(footer, BorderLayout.SOUTH);
+
+		dialog.pack();
+		// Ensure it doesn't exceed screen height
+		dialog.setSize(new Dimension(dialog.getWidth() + 20, Math.min(600, dialog.getHeight())));
+		dialog.setLocationRelativeTo(getParentFrame());
+		dialog.setVisible(true);
+	}
+
+	public void showColorSchemeDialogOld() {
 		JDialog dialog = new JDialog(getParentFrame(), "Color Settings", true);
 		dialog.setLayout(new BorderLayout());
 
@@ -4837,7 +4418,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		schemeBox.addItem("Solarized Dark");
 
 		JButton applyPreset = new JButton("Apply");
-		
+
 		// --- FIX: Wrap logic in try-finally to ensure dialog closes ---
 		applyPreset.addActionListener(e -> {
 			try {
@@ -4948,6 +4529,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 			// APPLY CROSSHAIR
 			terminalPanel.setShowCrosshair(crosshair.isSelected());
 
+			// Update the optimization flag
+			terminalPanel.setCursorBlinkEnabled(blink.isSelected());
+
 			dialog.dispose();
 		});
 		dialog.add(p, BorderLayout.CENTER);
@@ -4989,25 +4573,16 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 	/**
 	 * Uploads a String (e.g., AI Code Block) directly to a Host Dataset.
-	 */
-	/**
-	 * Uploads a String (e.g., AI Code Block) directly to a Host Dataset.
 	 * 
-	 * FIX: Prioritize Linux detection. If the filename looks like a Linux path,
-	 * force HostType.LINUX even if the UI dialog passed TSO/CMS.
+	 * FIX: 1. Prioritizes HostType.LINUX if the filename looks like a path. 2.
+	 * Passes the callback into 'uploadTextToLinuxConsole' so the Success dialog
+	 * waits for the thread to actually finish.
 	 */
-	/**
-	 * Uploads a String (e.g., AI Code Block) directly to a Host Dataset.
-	 * 
-	 * FIX:
-	 * 1. Prioritizes HostType.LINUX if the filename looks like a path.
-	 * 2. Passes the callback into 'uploadTextToLinuxConsole' so the Success dialog
-	 *    waits for the thread to actually finish.
-	 */
-	public void uploadTextToHost(String textContent, String hostDataset, HostType ignoredType, MemoryTransferCallback callback) {
+	public void uploadTextToHost(String textContent, String hostDataset, HostType ignoredType,
+			MemoryTransferCallback callback) {
 		// 1. Intelligent Detection
 		HostType inferred = inferHostType(hostDataset);
-		
+
 		// Trust the filename over the dropdown if it looks like Linux
 		if (inferred == HostType.LINUX) {
 			this.hostType = HostType.LINUX;
@@ -5016,67 +4591,52 @@ public class TN3270Session extends JPanel implements KeyListener {
 		} else {
 			this.hostType = ignoredType;
 		}
-		
+
 		this.isMemoryTransfer = true;
+		this.ftDirection = FileTransferDirection.UPLOAD; // <--- FIX: Explicitly set direction
 		this.transferCallback = callback;
 		this.memoryUploadData = textContent.getBytes(StandardCharsets.UTF_8);
-		
+
 		// BRANCH: LINUX CONSOLE PASTE
 		if (this.hostType == HostType.LINUX) {
 			// Pass raw bytes and the callback to the thread
 			uploadTextToLinuxConsole(this.memoryUploadData, hostDataset, callback);
-			return; 
+			return;
 		}
 
 		// BRANCH: MAINFRAME IND$FILE
-		this.currentFilename = "AI_Generated_Content"; 
-		
+		this.currentFilename = "AI_Generated_Content";
+
 		// Smart LRECL Calculation
 		int maxLineLen = 80;
 		if (textContent != null) {
 			String[] lines = textContent.split("\\r?\\n");
 			for (String line : lines) {
-				if (line.length() > maxLineLen) maxLineLen = line.length();
+				if (line.length() > maxLineLen)
+					maxLineLen = line.length();
 			}
 		}
 		int lrecl = Math.max(255, maxLineLen);
-		
-		String cmd = buildIndFileCommand(
-				false, 
-				this.hostType == HostType.TSO, 
-				hostDataset, 
-				true, true, false, "V", String.valueOf(lrecl), "", ""
-		);
-		
+
+		String cmd = buildIndFileCommand(false, this.hostType == HostType.TSO, hostDataset, true, true, false, "V",
+				String.valueOf(lrecl), "", "");
+
 		showProgressDialog("Uploading to Host (" + this.hostType + ")...", memoryUploadData.length);
 		sendTransferCommand(cmd);
 	}
-	
-	/**
-	 * Downloads a Host Dataset directly to a String for the AI.
-	 */
+
 	/**
 	 * Downloads text from Linux via Screen Scraping (Corrected).
 	 * 
-	 * FIXES:
-	 * 1. BACKWARD SCAN LIMIT: Explicitly stops scanning at the PREVIOUS marker or 
-	 *    the script invocation command. This prevents reading duplicate data from 
-	 *    previous chunks (the primary cause of Base64 decode errors).
-	 * 2. GARBAGE FILTER: Filters out "ACK" responses and short lines (<4 chars) 
-	 *    to avoid corrupting the Base64 buffer.
-	 * 3. DYNAMIC BATCHING: Uses smart clearing to optimize speed.
+	 * FIXES: 1. BACKWARD SCAN LIMIT: Explicitly stops scanning at the PREVIOUS
+	 * marker or the script invocation command. This prevents reading duplicate data
+	 * from previous chunks (the primary cause of Base64 decode errors). 2. GARBAGE
+	 * FILTER: Filters out "ACK" responses and short lines (<4 chars) to avoid
+	 * corrupting the Base64 buffer. 3. DYNAMIC BATCHING: Uses smart clearing to
+	 * optimize speed.
 	 */
-	
+
 	public void downloadTextFromHost(String hostDataset, HostType ignoredType, MemoryTransferCallback callback) {
-	    // --- AUTO-DETECT LOGIC ---
-		/*
-		// We prioritize the passed type if specific, otherwise infer
-		if (ignoredType == null) {
-			this.hostType = inferHostType(hostDataset);
-		} else {
-			this.hostType = ignoredType;
-		}
-		*/
 		// 1. Intelligent Detection
 		HostType inferred = inferHostType(hostDataset);
 
@@ -5094,35 +4654,23 @@ public class TN3270Session extends JPanel implements KeyListener {
 			downloadTextFromLinuxConsole(hostDataset, callback);
 			return;
 		}
-		
-		// BRANCH: MAINFRAME IND$FILE
-	    this.isMemoryTransfer = true;
-	    this.transferCallback = callback;
-	    this.memoryDownloadBuffer = new ByteArrayOutputStream();
-	    
-	    // --- AUTO-DETECT LOGIC ---
-	    this.hostType = inferHostType(hostDataset);
-	    
-	    this.currentFilename = hostDataset;
 
-	    // Build command using the DETECTED type
-	    String cmd = buildIndFileCommand(true, this.hostType == HostType.TSO, hostDataset, true, true, false, "", "", "", "");
-	    
-	    showProgressDialog("Downloading from Host (" + this.hostType + ")...", 0);
-	    sendTransferCommand(cmd);
-	}
-	
-	public void downloadTextFromHostOld(String hostDataset, HostType type, MemoryTransferCallback callback) {
+		// BRANCH: MAINFRAME IND$FILE
 		this.isMemoryTransfer = true;
+		this.ftDirection = FileTransferDirection.DOWNLOAD; // <--- FIX: Explicitly set direction
 		this.transferCallback = callback;
 		this.memoryDownloadBuffer = new ByteArrayOutputStream();
-		this.hostType = type;
+
+		// --- AUTO-DETECT LOGIC ---
+		this.hostType = inferHostType(hostDataset);
+
 		this.currentFilename = hostDataset;
 
-		// Build command: IND$FILE GET dataset ASCII CRLF
-		String cmd = buildIndFileCommand(true, type == HostType.TSO, hostDataset, true, true, false, "", "", "", "");
+		// Build command using the DETECTED type
+		String cmd = buildIndFileCommand(true, this.hostType == HostType.TSO, hostDataset, true, true, false, "", "",
+				"", "");
 
-		showProgressDialog("Downloading from Host...", 0);
+		showProgressDialog("Downloading from Host (" + this.hostType + ")...", 0);
 		sendTransferCommand(cmd);
 	}
 
@@ -5162,113 +4710,88 @@ public class TN3270Session extends JPanel implements KeyListener {
 				transferCallback.onError(e.getMessage());
 		}
 	}
-	
+
 	public static HostType inferHostType(String filename) {
-	    if (filename == null) return HostType.TSO; // Default safety
-	    
-	    String clean = filename.trim();
-	    
+		if (filename == null)
+			return HostType.TSO; // Default safety
+
+		String clean = filename.trim();
+
 		// Rule 0: Linux Indicators
 		// - Contains '/' (Absolute path or relative path like 'dir/file')
 		// - Starts with './' (Explicit relative path)
-		// - Starts with '.' followed by letters (Hidden file like '.bashrc', distinct from TSO '.qualifier')
-		if (clean.contains("/") || clean.startsWith("./") || (clean.startsWith(".") && !clean.contains("..") && !clean.toUpperCase().equals(clean))) {
-            // The case check !clean.toUpperCase().equals(clean) is a weak heuristic 
-            // implying if it has lowercase, it's likely Linux, but '/' is the strong signal.
-            return HostType.LINUX;
+		// - Starts with '.' followed by letters (Hidden file like '.bashrc', distinct
+		// from TSO '.qualifier')
+		if (clean.contains("/") || clean.startsWith("./")
+				|| (clean.startsWith(".") && !clean.contains("..") && !clean.toUpperCase().equals(clean))) {
+			// The case check !clean.toUpperCase().equals(clean) is a weak heuristic
+			// implying if it has lowercase, it's likely Linux, but '/' is the strong
+			// signal.
+			return HostType.LINUX;
 		}
-	    
-	    // Rule 1: CMS uses spaces to separate FN FT FM (e.g., "PROFILE EXEC A")
-	    // TSO datasets typically do not contain spaces (unless enclosed in quotes, which is rare for IND$FILE input)
-	    if (clean.contains(" ")) {
-	        return HostType.CMS;
-	    }
-	    
-	    // Rule 2: TSO often uses parentheses for PDS members (e.g., "MY.LIB(MEMBER)")
-	    if (clean.contains("(") && clean.contains(")")) {
-	        return HostType.TSO;
-	    }
-	    
-	    // Rule 3: TSO uses dots for qualifiers (e.g., "A.B.C"). 
-	    // CMS *can* use dots in filenames, but usually they are accompanied by spaces for the filetype.
-	    // If it's just "A.B.C" with no spaces, it's almost certainly TSO.
-	    if (clean.contains(".")) {
-	        return HostType.TSO;
-	    }
-	    
-	    // Fallback: Single word (e.g. "MYFILE").
-	    // On TSO, this implies "userid.MYFILE".
-	    // On CMS, a single word is usually invalid for IND$FILE (needs Filetype).
-	    // Therefore, TSO is the safer default.
-	    return HostType.TSO;
+
+		// Rule 1: CMS uses spaces to separate FN FT FM (e.g., "PROFILE EXEC A")
+		// TSO datasets typically do not contain spaces (unless enclosed in quotes,
+		// which is rare for IND$FILE input)
+		if (clean.contains(" ")) {
+			return HostType.CMS;
+		}
+
+		// Rule 2: TSO often uses parentheses for PDS members (e.g., "MY.LIB(MEMBER)")
+		if (clean.contains("(") && clean.contains(")")) {
+			return HostType.TSO;
+		}
+
+		// Rule 3: TSO uses dots for qualifiers (e.g., "A.B.C").
+		// CMS *can* use dots in filenames, but usually they are accompanied by spaces
+		// for the filetype.
+		// If it's just "A.B.C" with no spaces, it's almost certainly TSO.
+		if (clean.contains(".")) {
+			return HostType.TSO;
+		}
+
+		// Fallback: Single word (e.g. "MYFILE").
+		// On TSO, this implies "userid.MYFILE".
+		// On CMS, a single word is usually invalid for IND$FILE (needs Filetype).
+		// Therefore, TSO is the safer default.
+		return HostType.TSO;
 	}
-	
+
 	private boolean isStatusNotAccepted() {
 		// CP Status is usually in the last 20-30 characters of the screen
 		int size = screenModel.getSize();
 		int checkLen = 40;
 		int start = Math.max(0, size - checkLen);
-		
+
 		String bottomText = screenModel.getString(start, checkLen);
 		return bottomText.contains("NOT ACCEPTED");
 	}
 
-		/**
-		 * Uploads text to Linux via Base64 + Batched ACK Flow Control.
-		 * 
-		 * OPTIMIZATION:
-		 * 1. The shell function 'rx' now maintains a line counter 'i' and returns "ACK$i".
-		 * 2. Java waits for the specific numbered ACK (e.g., "ACK1", "ACK5") to ensure synchronization.
-		 * 3. We only clear the screen every 10 lines, rather than every line, drastically reducing overhead.
-		 */
-	/**
-	 * Uploads text to Linux via Base64 + ACK Flow Control.
-	 * 
-	 * OPTIMIZATIONS:
-	 * 1. Added Status Bar updates.
-	 */
-	/**
-	 * Uploads text to Linux via Base64 + ACK Flow Control (Dynamic Screen Management).
-	 * 
-	 * OPTIMIZATIONS:
-	 * 1. DYNAMIC CLEARING: Inspects ScreenModel cursor position. Only clears the screen
-	 *    when we are within 5 lines of the bottom. This automatically adapts to
-	 *    screen size (24 vs 43 lines) and 'stty echo' status.
-	 * 2. ECHO SUPPRESSION: Sends 'stty -echo' to maximize throughput.
-	 */
 	/**
 	 * Uploads data to Linux via Base64 + ACK Flow Control.
 	 * 
-	 * FIXES:
-	 * 1. Accepts 'byte[]' to support binary files.
-	 * 2. Accepts 'MemoryTransferCallback' to notify completion correctly.
-	 * 3. Uses 'stty -echo' + 10-line batches for speed and stability.
-	 */
-	/**
-	 * Uploads data to Linux via Base64 + ACK Flow Control.
-	 * 
-	 * FIXES:
-	 * 1. URL-SAFE BASE64: Uses '-' and '_' instead of '+' and '/' to avoid EBCDIC 
-	 *    translation issues that corrupt binary streams.
-	 * 2. DECODE PIPELINE: Uses 'tr' to restore standard Base64 before decoding.
-	 * 3. COMPATIBILITY: Removed '-i' flag from base64 command (incompatible with BusyBox).
+	 * FIXES: 1. URL-SAFE BASE64: Uses '-' and '_' instead of '+' and '/' to avoid
+	 * EBCDIC translation issues that corrupt binary streams. 2. DECODE PIPELINE:
+	 * Uses 'tr' to restore standard Base64 before decoding. 3. COMPATIBILITY:
+	 * Removed '-i' flag from base64 command (incompatible with BusyBox).
 	 */
 	private void uploadTextToLinuxConsole(byte[] content, String filename, MemoryTransferCallback callback) {
 		if (content == null || content.length == 0) {
-			if (callback != null) callback.onError("No content to upload.");
+			if (callback != null)
+				callback.onError("No content to upload.");
 			return;
 		}
 
 		String safeName = filename.trim().replaceAll("[^a-zA-Z0-9./_-]", "_");
 		String tempFile = safeName + ".b64";
 		String delimiter = "EOF" + java.util.UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-		
+
 		// USE URL ENCODER (Safe for EBCDIC/ASCII transit)
 		// Replaces '+' with '-' and '/' with '_'
 		String b64 = java.util.Base64.getUrlEncoder().encodeToString(content);
-		
+
 		List<String> chunks = new ArrayList<>();
-		int chunkLen = 76; 
+		int chunkLen = 76;
 		for (int i = 0; i < b64.length(); i += chunkLen) {
 			chunks.add(b64.substring(i, Math.min(b64.length(), i + chunkLen)));
 		}
@@ -5280,7 +4803,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Initializing..."));
 				sendAID(AID_CLEAR);
 				Thread.sleep(250);
-				
+
 				sendSafely("stty -echo", AID_ENTER);
 				Thread.sleep(250);
 
@@ -5289,7 +4812,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				String part1 = "rx(){ echo 'RDY';i=0;while read -r l;do";
 				String part2 = "if [ \"$l\" = \"$2\" ];then break;fi;printf \"%s\\n\" \"$l\">>\"$1\";";
 				String part3 = "i=$((i+1));echo \"ACK$i\";done;}";
-				
+
 				sendSafely(part1, AID_ENTER);
 				sendSafely(part2, AID_ENTER);
 				sendSafely(part3, AID_ENTER);
@@ -5299,29 +4822,29 @@ public class TN3270Session extends JPanel implements KeyListener {
 				sendSafely("", AID_CLEAR);
 				Thread.sleep(250);
 				sendSafely("rx " + tempFile + " " + delimiter, AID_ENTER);
-				
+
 				if (!waitForString("RDY", 5000)) {
 					throw new IOException("Handshake failed: Host did not reply with RDY.");
 				}
-				
-				sendSafely("", AID_CLEAR); 
+
+				sendSafely("", AID_CLEAR);
 				Thread.sleep(100);
 
 				// 4. SEND LOOP
 				int total = chunks.size();
 				// Use 10-line batches to account for prompts/status lines
-				int batchSize = 10; 
-				
+				int batchSize = 10;
+
 				for (int i = 0; i < total; i++) {
 					String chunk = chunks.get(i);
 					int seq = i + 1;
-					
-					SwingUtilities.invokeLater(() -> statusBar.setStatus(
-						String.format("Linux Upload: Chunk %d of %d", seq, total)));
-					
+
+					SwingUtilities.invokeLater(
+							() -> statusBar.setStatus(String.format("Linux Upload: Chunk %d of %d", seq, total)));
+
 					sendText(chunk);
 					sendAID(AID_ENTER);
-					
+
 					String expectedAck = "ACK" + seq;
 					if (!waitForString(expectedAck, 3000)) {
 						sendAID(AID_CLEAR);
@@ -5329,7 +4852,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 							throw new IOException("Timeout waiting for " + expectedAck);
 						}
 					}
-					
+
 					if (seq % batchSize == 0) {
 						sendAID(AID_CLEAR);
 						Thread.sleep(50);
@@ -5340,34 +4863,37 @@ public class TN3270Session extends JPanel implements KeyListener {
 				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Finalizing..."));
 				sendText(delimiter);
 				sendAID(AID_ENTER);
-				Thread.sleep(500); 
+				Thread.sleep(500);
 
 				// 6. DECODE & CLEANUP
 				// Pipeline: Cat -> Translate URL-Safe back to Std -> Base64 Decode
 				String decodeCmd = "cat " + tempFile + " | tr '_-' '/+' | base64 -d > " + safeName;
 				sendSafely(decodeCmd, AID_ENTER);
 				Thread.sleep(500);
-				
+
 				sendSafely("rm " + tempFile, AID_ENTER);
 				Thread.sleep(200);
-				
+
 				sendSafely("unset -f rx", AID_ENTER);
 				sendSafely("", AID_CLEAR);
-				
+
 				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Complete"));
-				
-				if (callback != null) callback.onUploadComplete();
+
+				if (callback != null)
+					callback.onUploadComplete();
 
 			} catch (Exception e) {
 				e.printStackTrace();
 				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Error"));
-				if (callback != null) callback.onError(e.getMessage());
+				if (callback != null)
+					callback.onError(e.getMessage());
 			} finally {
 				try {
 					sendSafely("stty echo", AID_ENTER);
 					sendSafely("", AID_CLEAR);
-				} catch (Exception ex) { }
-				
+				} catch (Exception ex) {
+				}
+
 				SwingUtilities.invokeLater(() -> {
 					terminalPanel.setPaintingEnabled(true);
 					terminalPanel.repaint();
@@ -5375,861 +4901,223 @@ public class TN3270Session extends JPanel implements KeyListener {
 			}
 		}).start();
 	}
-	
-	private void uploadTextToLinuxConsoleGood(byte[] content, String filename, MemoryTransferCallback callback) {
-		if (content == null || content.length == 0) {
-			if (callback != null) callback.onError("No content to upload.");
-			return;
-		}
 
-		String safeName = filename.trim().replaceAll("[^a-zA-Z0-9./_-]", "_");
-		String tempFile = safeName + ".b64";
-		String delimiter = "EOF" + java.util.UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-		
-		String b64 = java.util.Base64.getEncoder().encodeToString(content);
-		List<String> chunks = new ArrayList<>();
-		int chunkLen = 76; 
-		for (int i = 0; i < b64.length(); i += chunkLen) {
-			chunks.add(b64.substring(i, Math.min(b64.length(), i + chunkLen)));
-		}
-
-		new Thread(() -> {
-			SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-			try {
-				// 1. PRE-CLEAR & CONFIG
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Initializing..."));
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-				
-				// Disable echo to save screen space
-				sendSafely("stty -echo", AID_ENTER);
-				Thread.sleep(250);
-
-				// 2. DEFINE RECEIVER FUNCTION
-				String part1 = "rx(){ echo 'RDY';i=0;while read -r l;do";
-				String part2 = "if [ \"$l\" = \"$2\" ];then break;fi;echo \"$l\">>\"$1\";";
-				String part3 = "i=$((i+1));echo \"ACK$i\";done;}";
-				
-				sendSafely(part1, AID_ENTER);
-				sendSafely(part2, AID_ENTER);
-				sendSafely(part3, AID_ENTER);
-				Thread.sleep(500);
-
-				// 3. START RECEIVER
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-				sendSafely("rx " + tempFile + " " + delimiter, AID_ENTER);
-				
-				if (!waitForString("RDY", 5000)) {
-					throw new IOException("Handshake failed: Host did not reply with RDY.");
-				}
-				
-				sendSafely("", AID_CLEAR); 
-				Thread.sleep(100);
-
-				// 4. SEND LOOP
-				int total = chunks.size();
-				int batchSize = 10; // Safe limit with echo disabled
-				
-				for (int i = 0; i < total; i++) {
-					String chunk = chunks.get(i);
-					int seq = i + 1;
-					
-					// Update UI
-					final int current = i + 1;
-					SwingUtilities.invokeLater(() -> statusBar.setStatus(
-						String.format("Linux Upload: Chunk %d of %d", current, total)));
-					
-					sendText(chunk);
-					sendAID(AID_ENTER);
-					
-					String expectedAck = "ACK" + seq;
-					if (!waitForString(expectedAck, 3000)) {
-						System.err.println("Timeout waiting for " + expectedAck);
-						// Recovery attempt
-						sendAID(AID_CLEAR);
-						if (!waitForString(expectedAck, 2000)) break;
-					}
-					
-					if (seq % batchSize == 0) {
-						sendAID(AID_CLEAR);
-						Thread.sleep(50);
-					}
-				}
-
-				// 5. FINISH
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Finalizing..."));
-				sendText(delimiter);
-				sendAID(AID_ENTER);
-				Thread.sleep(500); 
-
-				// 6. DECODE & CLEANUP
-				sendSafely("base64 -d " + tempFile + " > " + safeName, AID_ENTER);
-				Thread.sleep(500);
-				
-				sendSafely("rm " + tempFile, AID_ENTER);
-				Thread.sleep(200);
-				
-				sendSafely("unset -f rx", AID_ENTER);
-				sendSafely("", AID_CLEAR);
-				
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Complete"));
-				
-				// TRIGGER CALLBACK ONLY NOW
-				if (callback != null) callback.onUploadComplete();
-
-			} catch (Exception e) {
-				e.printStackTrace();
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Error"));
-				if (callback != null) callback.onError(e.getMessage());
-			} finally {
-				// Restore Echo state
-				try {
-					sendSafely("stty echo", AID_ENTER);
-					sendSafely("", AID_CLEAR);
-				} catch (Exception ex) { /* Ignore */ }
-				
-				SwingUtilities.invokeLater(() -> {
-					terminalPanel.setPaintingEnabled(true);
-					terminalPanel.repaint();
-				});
-			}
-		}).start();
-	}
-	
-	private void uploadTextToLinuxConsoleGolden(String content, String filename) {
-		if (content == null || content.isEmpty()) return;
-
-		String safeName = filename.trim().replaceAll("[^a-zA-Z0-9./_-]", "_");
-		String tempFile = safeName + ".b64";
-		String delimiter = "EOF" + java.util.UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-		
-		String b64 = java.util.Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
-		List<String> chunks = new ArrayList<>();
-		int chunkLen = 76; 
-		for (int i = 0; i < b64.length(); i += chunkLen) {
-			chunks.add(b64.substring(i, Math.min(b64.length(), i + chunkLen)));
-		}
-
-		new Thread(() -> {
-			SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-			try {
-				// 1. PRE-CLEAR & CONFIG
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Initializing..."));
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-				
-				// Disable echo to save screen space
-				sendSafely("stty -echo", AID_ENTER);
-				Thread.sleep(250);
-
-				// 2. DEFINE RECEIVER FUNCTION
-				String part1 = "rx(){ echo 'RDY';i=0;while read -r l;do";
-				String part2 = "if [ \"$l\" = \"$2\" ];then break;fi;echo \"$l\">>\"$1\";";
-				String part3 = "i=$((i+1));echo \"ACK$i\";done;}";
-				
-				sendSafely(part1, AID_ENTER);
-				sendSafely(part2, AID_ENTER);
-				sendSafely(part3, AID_ENTER);
-				Thread.sleep(500);
-
-				// 3. START RECEIVER
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-				sendSafely("rx " + tempFile + " " + delimiter, AID_ENTER);
-				
-				if (!waitForString("RDY", 5000)) {
-					System.err.println("Handshake failed: Host did not reply with RDY.");
-					sendSafely("", AID_CLEAR);
-					return;
-				}
-				
-				sendSafely("", AID_CLEAR); 
-				Thread.sleep(100);
-
-				// 4. SEND LOOP
-				int total = chunks.size();
-				for (int i = 0; i < total; i++) {
-					String chunk = chunks.get(i);
-					int seq = i + 1;
-					
-					// Update UI
-					final int current = i + 1;
-					SwingUtilities.invokeLater(() -> statusBar.setStatus(
-						String.format("Linux Upload: Chunk %d of %d", current, total)));
-					
-					// --- DYNAMIC SCREEN MANAGEMENT ---
-					// Check how much vertical space we have left.
-					int cursorRow = screenModel.getCursorPos() / screenModel.getCols();
-					int totalRows = screenModel.getRows();
-					
-					// We need roughly 3-4 lines for the next operation (Input + Echo + ACK + Prompt)
-					// If we are within 5 lines of the bottom, CLEAR to avoid "MORE..." status.
-					if ((totalRows - cursorRow) < 5) {
-						sendAID(AID_CLEAR);
-						Thread.sleep(50); // Short pause for z/VM
-					}
-					// ---------------------------------
-					
-					sendText(chunk);
-					sendAID(AID_ENTER);
-					
-					String expectedAck = "ACK" + seq;
-					if (!waitForString(expectedAck, 3000)) {
-						System.err.println("Timeout waiting for " + expectedAck);
-						// Recovery attempt
-						sendAID(AID_CLEAR);
-						if (!waitForString(expectedAck, 2000)) break;
-					}
-				}
-
-				// 5. FINISH
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Finalizing..."));
-				sendText(delimiter);
-				sendAID(AID_ENTER);
-				Thread.sleep(500); 
-
-				// 6. DECODE & CLEANUP
-				sendSafely("base64 -d " + tempFile + " > " + safeName, AID_ENTER);
-				Thread.sleep(500);
-				
-				sendSafely("rm " + tempFile, AID_ENTER);
-				Thread.sleep(200);
-				
-				sendSafely("unset -f rx", AID_ENTER);
-				sendSafely("", AID_CLEAR);
-				
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Complete"));
-
-			} catch (Exception e) {
-				e.printStackTrace();
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Error"));
-			} finally {
-				// Restore Echo state blindly
-				try {
-					sendSafely("stty echo", AID_ENTER);
-					sendSafely("", AID_CLEAR);
-				} catch (Exception ex) { /* Ignore */ }
-				
-				SwingUtilities.invokeLater(() -> {
-					terminalPanel.setPaintingEnabled(true);
-					terminalPanel.repaint();
-				});
-			}
-		}).start();
-	}
-	
-	private void uploadTextToLinuxConsoleLast(String content, String filename) {
-		if (content == null || content.isEmpty()) return;
-
-		String safeName = filename.trim().replaceAll("[^a-zA-Z0-9./_-]", "_");
-		String tempFile = safeName + ".b64";
-		String delimiter = "EOF" + java.util.UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-		
-		String b64 = java.util.Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
-		List<String> chunks = new ArrayList<>();
-		int chunkLen = 76; 
-		for (int i = 0; i < b64.length(); i += chunkLen) {
-			chunks.add(b64.substring(i, Math.min(b64.length(), i + chunkLen)));
-		}
-
-		new Thread(() -> {
-			SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-			try {
-				// 1. PRE-CLEAR
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Initializing..."));
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-
-				// 2. DEFINE RECEIVER FUNCTION
-				String part1 = "rx(){ echo 'RDY';i=0;while read -r l;do";
-				String part2 = "if [ \"$l\" = \"$2\" ];then break;fi;echo \"$l\">>\"$1\";";
-				String part3 = "i=$((i+1));echo \"ACK$i\";done;}";
-				
-				sendSafely(part1, AID_ENTER);
-				sendSafely(part2, AID_ENTER);
-				sendSafely(part3, AID_ENTER);
-				Thread.sleep(500);
-
-				// 3. CLEAR DEFINITION
-				sendSafely("", AID_CLEAR);
-				Thread.sleep(250);
-
-				// 4. START RECEIVER
-				sendSafely("rx " + tempFile + " " + delimiter, AID_ENTER);
-				
-				if (!waitForString("RDY", 5000)) {
-					System.err.println("Handshake failed: Host did not reply with RDY.");
-					sendSafely("", AID_CLEAR);
-					return;
-				}
-				
-				sendSafely("", AID_CLEAR); 
-				Thread.sleep(100);
-
-				// 5. SEND LOOP
-				int total = chunks.size();
-				for (int i = 0; i < total; i++) {
-					String chunk = chunks.get(i);
-					int seq = i + 1;
-					
-					// Status Update
-					final int current = i + 1;
-					SwingUtilities.invokeLater(() -> statusBar.setStatus(
-						String.format("Linux Upload: Chunk %d of %d", current, total)));
-					
-					sendText(chunk);
-					sendAID(AID_ENTER);
-					
-					String expectedAck = "ACK" + seq;
-					// Reduced timeout for speed, host should be responsive
-					if (!waitForString(expectedAck, 3000)) {
-						System.err.println("Timeout waiting for " + expectedAck);
-						break;
-					}
-					
-					// A standard 3270 screen is 24 lines (or more). 10 is safe.
-					if (seq % 10 == 0) {
-						sendAID(AID_CLEAR);
-						Thread.sleep(50);
-					}
-				}
-
-				// 6. FINISH
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Finalizing..."));
-				sendText(delimiter);
-				sendAID(AID_ENTER);
-				Thread.sleep(500); 
-
-				// 7. DECODE & CLEANUP
-				sendSafely("base64 -d " + tempFile + " > " + safeName, AID_ENTER);
-				Thread.sleep(500);
-				
-				sendSafely("rm " + tempFile, AID_ENTER);
-				Thread.sleep(200);
-				
-				sendSafely("unset -f rx", AID_ENTER);
-				sendSafely("", AID_CLEAR);
-				
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Complete"));
-
-			} catch (Exception e) {
-				e.printStackTrace();
-				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Upload: Error"));
-			} finally {
-				SwingUtilities.invokeLater(() -> {
-					terminalPanel.setPaintingEnabled(true);
-					terminalPanel.repaint();
-				});
-			}
-		}).start();
-	}
-	
-		private void uploadTextToLinuxConsoleWorking(String content, String filename) {
-			if (content == null || content.isEmpty()) return;
-
-			String safeName = filename.trim().replaceAll("[^a-zA-Z0-9./_-]", "_");
-			String tempFile = safeName + ".b64";
-			String delimiter = "EOF" + java.util.UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-			
-			String b64 = java.util.Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
-			List<String> chunks = new ArrayList<>();
-			int chunkLen = 76; 
-			for (int i = 0; i < b64.length(); i += chunkLen) {
-				chunks.add(b64.substring(i, Math.min(b64.length(), i + chunkLen)));
-			}
-
-			new Thread(() -> {
-				SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-				try {
-					// 1. PRE-CLEAR
-					sendSafely("", AID_CLEAR);
-					Thread.sleep(250);
-
-					// 2. DEFINE RECEIVER FUNCTION (With Counter)
-					// Part 1: Header + Init counter 'i'
-					String part1 = "rx(){ echo 'RDY';i=0;while read -r l;do";
-					// Part 2: Check delimiter + Append
-					String part2 = "if [ \"$l\" = \"$2\" ];then break;fi;echo \"$l\">>\"$1\";";
-					// Part 3: Increment counter + Echo Numbered ACK + Close
-					String part3 = "i=$((i+1));echo \"ACK$i\";done;}";
-					
-					sendSafely(part1, AID_ENTER);
-					sendSafely(part2, AID_ENTER);
-					sendSafely(part3, AID_ENTER);
-					Thread.sleep(500);
-
-					// 3. CRITICAL: CLEAR DEFINITION FROM SCREEN
-					sendSafely("", AID_CLEAR);
-					Thread.sleep(250);
-
-					// 4. START RECEIVER & HANDSHAKE
-					sendSafely("rx " + tempFile + " " + delimiter, AID_ENTER);
-					
-					if (!waitForString("RDY", 5000)) {
-						System.err.println("Handshake failed: Host did not reply with RDY.");
-						sendSafely("", AID_CLEAR);
-						return;
-					}
-					
-					// Clear the "RDY" to start clean
-					sendSafely("", AID_CLEAR); 
-					Thread.sleep(100);
-
-					// 5. SEND LOOP (Batched)
-					for (int i = 0; i < chunks.size(); i++) {
-						String chunk = chunks.get(i);
-						int seq = i + 1; // 1-based sequence for shell output
-						
-						sendText(chunk);
-						sendAID(AID_ENTER);
-						
-						// Wait for SPECIFIC Numbered ACK (e.g., "ACK1", "ACK15")
-						// This ensures we don't confuse old ACKs with the current one.
-						String expectedAck = "ACK" + seq;
-						if (!waitForString(expectedAck, 5000)) {
-							System.err.println("Timeout waiting for " + expectedAck);
-							break;
-						}
-						
-						// BATCHED CLEAR: Only clear every 10 lines to speed up transfer
-						if (seq % 10 == 0) {
-							sendAID(AID_CLEAR);
-							// Wait briefly for clear to take effect so we don't read stale text
-							Thread.sleep(50);
-						}
-					}
-
-					// 6. FINISH
-					sendText(delimiter);
-					sendAID(AID_ENTER);
-					Thread.sleep(500); 
-
-					// 7. DECODE & CLEANUP
-					sendSafely("base64 -d " + tempFile + " > " + safeName, AID_ENTER);
-					Thread.sleep(500);
-					
-					sendSafely("rm " + tempFile, AID_ENTER);
-					Thread.sleep(200);
-					
-					sendSafely("unset -f rx", AID_ENTER);
-					sendSafely("", AID_CLEAR);
-
-				} catch (Exception e) {
-					e.printStackTrace();
-				} finally {
-					SwingUtilities.invokeLater(() -> {
-						terminalPanel.setPaintingEnabled(true);
-						terminalPanel.repaint();
-					});
-				}
-			}).start();
-		}
-	
 	/**
-	 * Downloads text from Linux via Screen Scraping (ACK Flow Control).
+	 * Downloads text from Linux via Screen Scraping (Robust).
 	 * 
-	 * FIXES:
-	 * 1. FLOW CONTROL: Sends "ACK" + ENTER to acknowledge every chunk.
-	 *    - This sets the MDT (Modified Data Tag), forcing z/VM to pass the input 
-	 *      to the Linux shell (bypassing "VM READ").
-	 *    - It provides a visual confirmation in the console history that chunks 
-	 *      were processed.
-	 * 2. SCRAPING: Uses fixed-window scanning (10 lines) for efficiency.
+	 * FIXES: 1. FILTERING: Ignores "ACK" and short lines (<4 chars) to prevent
+	 * stream corruption. 2. NORMALIZATION: Scrapes both standard and URL-safe
+	 * Base64 chars, then normalizes to standard Base64 before decoding. This
+	 * handles cases where 'tr' might fail on the host. 3. FLOW CONTROL: Uses "ACK"
+	 * + Enter for robust input handling.
 	 */
-		/**
-		 * Downloads text from Linux via Screen Scraping.
-		 * 
-		 * OPTIMIZATIONS:
-		 * 1. Uses "Single Enter + Data" flow control (fastest method).
-		 * 2. Added Status Bar updates.
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (Dynamic Batching).
-		 * 
-		 * OPTIMIZATIONS:
-		 * 1. DYNAMIC CLEARING: Identifies the row of the current "---WAIT---" marker.
-		 *    If there is room for the NEXT chunk (10 lines + overhead) on the current screen,
-		 *    we skip the AID_CLEAR. This allows batching multiple chunks per screen refresh.
-		 * 2. FLOW CONTROL: Uses "ACK" + Enter to satisfy the shell read.
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (Corrected).
-		 * 
-		 * FIXES:
-		 * 1. BACKWARD SCAN LIMIT: Explicitly stops scanning at the PREVIOUS marker or 
-		 *    the script invocation command. This prevents reading duplicate data from 
-		 *    previous chunks (the primary cause of Base64 decode errors).
-		 * 2. GARBAGE FILTER: Filters out "ACK" responses and short lines (<4 chars) 
-		 *    to avoid corrupting the Base64 buffer.
-		 * 3. DYNAMIC BATCHING: Uses smart clearing to optimize speed.
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (URL-Safe / EBCDIC Robust).
-		 * 
-		 * FIXES:
-		 * 1. CHAR SAFETY: Pipes Linux output through "tr '+/' '-_'" to convert standard Base64 
-		 *    to URL-Safe Base64. This prevents EBCDIC translation issues with '+' and '/'.
-		 * 2. JAVA DECODING: Uses UrlDecoder to handle the safe characters.
-		 * 3. REGEX: Updated to accept '-' and '_' instead of '+' and '/'.
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (Corrected TR Syntax).
-		 * 
-		 * FIXES:
-		 * 1. TR COMMAND SYNTAX: Changed "tr '+/' '-_'" to "tr '/+' '_-'" to avoid 
-		 *    the leading hyphen being interpreted as a command flag by the Linux shell.
-		 *    This ensures proper conversion to URL-Safe Base64 (- and _).
-		 * 2. MAPPING ACCURACY: Maintains RFC 4648 mapping (+ -> - and / -> _) by 
-		 *    swapping both sets (Index 0 maps to Index 0, Index 1 to Index 1).
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (Binary Safe).
-		 * 
-		 * FIXES:
-		 * 1. BINARY INTEGRITY: Passes raw byte[] to the callback. This prevents 
-		 *    UTF-8 expansion of binary data (which caused the file size increase).
-		 * 2. FLOW CONTROL: Uses "ACK" + Enter for robust input handling.
-		 * 3. CLEANUP: Handles history clearing and safe decoding.
-		 */
-		/**
-		 * Downloads text from Linux via Screen Scraping (Robust).
-		 * 
-		 * FIXES:
-		 * 1. FILTERING: Ignores "ACK" and short lines (<4 chars) to prevent stream corruption.
-		 * 2. NORMALIZATION: Scrapes both standard and URL-safe Base64 chars, then normalizes 
-		 *    to standard Base64 before decoding. This handles cases where 'tr' might fail on the host.
-		 * 3. FLOW CONTROL: Uses "ACK" + Enter for robust input handling.
-		 */
-		private void downloadTextFromLinuxConsole(String filename, MemoryTransferCallback callback) {
-			new Thread(() -> {
-				SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-				try {
-					String safeName = filename.trim();
-					String id = java.util.UUID.randomUUID().toString().substring(0, 5);
-					String tempFile = "dl_" + id + ".tmp";
-					String splitPrefix = "chk_" + id + "_";
-					String scriptName = "run_" + id + ".sh";
-					StringBuilder base64Buffer = new StringBuilder();
-					
-					final int CHUNK_SIZE = 10; 
-					
-					// 1. Initial Setup
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Initializing..."));
-					sendAID(AID_CLEAR);
-					Thread.sleep(500);
+	private void downloadTextFromLinuxConsole(String filename, MemoryTransferCallback callback) {
+		new Thread(() -> {
+			SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
+			try {
+				String safeName = filename.trim();
+				String id = java.util.UUID.randomUUID().toString().substring(0, 5);
+				String tempFile = "dl_" + id + ".tmp";
+				String splitPrefix = "chk_" + id + "_";
+				String scriptName = "run_" + id + ".sh";
+				StringBuilder base64Buffer = new StringBuilder();
 
-					// Prepare Source: Encode -> Translate to URL-Safe (Robust Syntax) -> Save
-					String prepCmd = "base64 -w 76 " + safeName + " | tr '/+' '_-' > " + tempFile;
-					sendSafely(prepCmd, AID_ENTER);
-					Thread.sleep(250);
-					
-					sendSafely("split -l " + CHUNK_SIZE + " " + tempFile + " " + splitPrefix, AID_ENTER);
-					Thread.sleep(250);
+				final int CHUNK_SIZE = 10;
 
-					List<String> scriptLines = new ArrayList<>();
-					scriptLines.add("i=0");
-					scriptLines.add("for f in " + splitPrefix + "*; do");
-					scriptLines.add("  cat $f");
-					scriptLines.add("  echo \"---WAIT $i---\""); 
-					scriptLines.add("  read -r _"); 
-					scriptLines.add("  rm $f");
-					scriptLines.add("  i=$((i+1))");
-					scriptLines.add("done");
-					scriptLines.add("rm " + tempFile);
-					scriptLines.add("echo \"---EOF---\"");
-					scriptLines.add("rm " + scriptName); 
+				// 1. Initial Setup
+				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Initializing..."));
+				sendAID(AID_CLEAR);
+				Thread.sleep(500);
 
-					sendSafely("echo '" + scriptLines.get(0) + "' > " + scriptName, AID_ENTER);
-					Thread.sleep(100);
-					for (int j = 1; j < scriptLines.size(); j++) {
-						sendSafely("echo '" + scriptLines.get(j) + "' >> " + scriptName, AID_ENTER);
-						Thread.sleep(50);
-					}
+				// Prepare Source: Encode -> Translate to URL-Safe (Robust Syntax) -> Save
+				String prepCmd = "base64 -w 76 " + safeName + " | tr '/+' '_-' > " + tempFile;
+				sendSafely(prepCmd, AID_ENTER);
+				Thread.sleep(250);
 
-					sendAID(AID_CLEAR);
-					Thread.sleep(500);
-					sendSafely("sh " + scriptName, AID_ENTER);
-					
-					// 2. Scrape Loop
-					boolean downloading = true;
-					int chunkIndex = 0;
-					
-					while (downloading) {
-						String currentMarker = "---WAIT " + chunkIndex + "---";
-						
-						final int cIdx = chunkIndex + 1;
-						final int bytes = base64Buffer.length();
-						SwingUtilities.invokeLater(() -> statusBar.setStatus(
-							String.format("Linux Download: Chunk %d (%d chars)...", cIdx, bytes)));
-						
-						String state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
-						
-						if (state == null) {
-							sendAID(AID_CLEAR);
-							state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
-							if (state == null) throw new IOException("Timeout waiting for " + currentMarker);
-						}
-						
-						if (state.equals(currentMarker)) {
-							int rows = screenModel.getRows();
-							int cols = screenModel.getCols();
-							int markerRow = -1;
-							
-							for (int r = 0; r < rows; r++) {
-								String line = screenModel.getString(r * cols, cols);
-								if (line.contains(currentMarker)) {
-									markerRow = r;
-									break;
-								}
-							}
-							
-							if (markerRow != -1) {
-								List<String> validLines = new ArrayList<>();
-								int linesScanned = 0;
-								
-								for (int r = markerRow - 1; r >= 0 && linesScanned < CHUNK_SIZE; r--) {
-									String line = screenModel.getString(r * cols, cols).trim();
-									linesScanned++;
-									
-									// FILTER: Ignore ACK echo and short garbage
-									if (line.equals("ACK")) continue;
-									if (line.length() < 4) continue; 
-									
-									// REGEX: Permissive match (Standard OR URL-Safe)
-									if (line.matches("^[A-Za-z0-9+/\\-_=]+$")) {
-										validLines.add(0, line);
-									}
-								}
-								for (String l : validLines) base64Buffer.append(l);
-							}
-							
-							// --- Advance ---
-							sendAID(AID_CLEAR);
-							Thread.sleep(250); 
-							sendSafely("ACK", AID_ENTER);
-							
-							chunkIndex++;
-						} else {
-							downloading = false;
-						}
-					}
-					
-					sendSafely("", AID_CLEAR);
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Complete"));
-					
-					try {
-						// NORMALIZE: Ensure we have standard Base64 before decoding
-						// Replaces URL-safe chars (-_) with Standard (+/)
-						String standardB64 = base64Buffer.toString().replace('-', '+').replace('_', '/');
-						
-						byte[] decoded = java.util.Base64.getDecoder().decode(standardB64);
-						
-						if (callback != null) callback.onDownloadComplete(decoded);
-					} catch (IllegalArgumentException e) {
-						if (callback != null) callback.onError("Base64 Decode: " + e.getMessage());
-					}
+				sendSafely("split -l " + CHUNK_SIZE + " " + tempFile + " " + splitPrefix, AID_ENTER);
+				Thread.sleep(250);
 
-				} catch (Exception e) {
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Error"));
-					if (callback != null) callback.onError(e.getMessage());
-				} finally {
-					SwingUtilities.invokeLater(() -> {
-						terminalPanel.setPaintingEnabled(true);
-						terminalPanel.repaint();
-					});
+				List<String> scriptLines = new ArrayList<>();
+				scriptLines.add("i=0");
+				scriptLines.add("for f in " + splitPrefix + "*; do");
+				scriptLines.add("  cat $f");
+				scriptLines.add("  echo \"---WAIT $i---\"");
+				scriptLines.add("  read -r _");
+				scriptLines.add("  rm $f");
+				scriptLines.add("  i=$((i+1))");
+				scriptLines.add("done");
+				scriptLines.add("rm " + tempFile);
+				scriptLines.add("echo \"---EOF---\"");
+				scriptLines.add("rm " + scriptName);
+
+				sendSafely("echo '" + scriptLines.get(0) + "' > " + scriptName, AID_ENTER);
+				Thread.sleep(100);
+				for (int j = 1; j < scriptLines.size(); j++) {
+					sendSafely("echo '" + scriptLines.get(j) + "' >> " + scriptName, AID_ENTER);
+					Thread.sleep(50);
 				}
-			}).start();
-		}
-		
-		private void downloadTextFromLinuxConsoleOld(String filename, MemoryTransferCallback callback) {
-			new Thread(() -> {
-				SwingUtilities.invokeLater(() -> terminalPanel.setPaintingEnabled(false));
-				try {
-					String safeName = filename.trim();
-					String id = java.util.UUID.randomUUID().toString().substring(0, 5);
-					String tempFile = "dl_" + id + ".tmp";
-					String splitPrefix = "chk_" + id + "_";
-					String scriptName = "run_" + id + ".sh";
-					StringBuilder base64Buffer = new StringBuilder();
-					
-					final int CHUNK_SIZE = 10; 
-					
-					// 1. Initial Setup
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Initializing..."));
-					sendAID(AID_CLEAR);
-					Thread.sleep(500);
 
-					// Prepare Source: Encode -> Translate to URL-Safe -> Save
-					String prepCmd = "base64 -w 76 " + safeName + " | tr '/+' '_-' > " + tempFile;
-					sendSafely(prepCmd, AID_ENTER);
-					Thread.sleep(250);
-					
-					sendSafely("split -l " + CHUNK_SIZE + " " + tempFile + " " + splitPrefix, AID_ENTER);
-					Thread.sleep(250);
+				sendAID(AID_CLEAR);
+				Thread.sleep(500);
+				sendSafely("sh " + scriptName, AID_ENTER);
 
-					List<String> scriptLines = new ArrayList<>();
-					scriptLines.add("i=0");
-					scriptLines.add("for f in " + splitPrefix + "*; do");
-					scriptLines.add("  cat $f");
-					scriptLines.add("  echo \"---WAIT $i---\""); 
-					scriptLines.add("  read -r _"); 
-					scriptLines.add("  rm $f");
-					scriptLines.add("  i=$((i+1))");
-					scriptLines.add("done");
-					scriptLines.add("rm " + tempFile);
-					scriptLines.add("echo \"---EOF---\"");
-					scriptLines.add("rm " + scriptName); 
+				// 2. Scrape Loop
+				boolean downloading = true;
+				int chunkIndex = 0;
 
-					sendSafely("echo '" + scriptLines.get(0) + "' > " + scriptName, AID_ENTER);
-					Thread.sleep(100);
-					for (int j = 1; j < scriptLines.size(); j++) {
-						sendSafely("echo '" + scriptLines.get(j) + "' >> " + scriptName, AID_ENTER);
-						Thread.sleep(50);
+				while (downloading) {
+					String currentMarker = "---WAIT " + chunkIndex + "---";
+
+					final int cIdx = chunkIndex + 1;
+					final int bytes = base64Buffer.length();
+					SwingUtilities.invokeLater(() -> statusBar
+							.setStatus(String.format("Linux Download: Chunk %d (%d chars)...", cIdx, bytes)));
+
+					String state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
+
+					if (state == null) {
+						sendAID(AID_CLEAR);
+						state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
+						if (state == null)
+							throw new IOException("Timeout waiting for " + currentMarker);
 					}
 
-					sendAID(AID_CLEAR);
-					Thread.sleep(500);
-					sendSafely("sh " + scriptName, AID_ENTER);
-					
-					// 2. Scrape Loop
-					boolean downloading = true;
-					int chunkIndex = 0;
-					
-					while (downloading) {
-						String currentMarker = "---WAIT " + chunkIndex + "---";
-						
-						// Status
-						final int cIdx = chunkIndex + 1;
-						final int bytes = base64Buffer.length();
-						SwingUtilities.invokeLater(() -> statusBar.setStatus(
-							String.format("Linux Download: Chunk %d (%d chars)...", cIdx, bytes)));
-						
-						String state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
-						
-						if (state == null) {
-							sendAID(AID_CLEAR);
-							state = waitForSmartMarker(currentMarker, "---EOF---", 5000);
-							if (state == null) throw new IOException("Timeout waiting for " + currentMarker);
+					if (state.equals(currentMarker)) {
+						int rows = screenModel.getRows();
+						int cols = screenModel.getCols();
+						int markerRow = -1;
+
+						for (int r = 0; r < rows; r++) {
+							String line = screenModel.getString(r * cols, cols);
+							if (line.contains(currentMarker)) {
+								markerRow = r;
+								break;
+							}
 						}
-						
-						if (state.equals(currentMarker)) {
-							int rows = screenModel.getRows();
-							int cols = screenModel.getCols();
-							int markerRow = -1;
-							
-							for (int r = 0; r < rows; r++) {
-								String line = screenModel.getString(r * cols, cols);
-								if (line.contains(currentMarker)) {
-									markerRow = r;
-									break;
+
+						if (markerRow != -1) {
+							List<String> validLines = new ArrayList<>();
+							int linesScanned = 0;
+
+							for (int r = markerRow - 1; r >= 0 && linesScanned < CHUNK_SIZE; r--) {
+								String line = screenModel.getString(r * cols, cols).trim();
+								linesScanned++;
+
+								// FILTER: Ignore ACK echo and short garbage
+								if (line.equals("ACK"))
+									continue;
+								if (line.length() < 4)
+									continue;
+
+								// REGEX: Permissive match (Standard OR URL-Safe)
+								if (line.matches("^[A-Za-z0-9+/\\-_=]+$")) {
+									validLines.add(0, line);
 								}
 							}
-							
-							if (markerRow != -1) {
-								List<String> validLines = new ArrayList<>();
-								int linesScanned = 0;
-								
-								for (int r = markerRow - 1; r >= 0 && linesScanned < CHUNK_SIZE; r--) {
-									String line = screenModel.getString(r * cols, cols).trim();
-									linesScanned++;
-									if (line.matches("^[A-Za-z0-9\\-_=]+$")) {
-										validLines.add(0, line);
-									}
-								}
-								for (String l : validLines) base64Buffer.append(l);
-							}
-							
-							sendAID(AID_CLEAR);
-							Thread.sleep(250); 
-							sendSafely("ACK", AID_ENTER);
-							
-							chunkIndex++;
-						} else {
-							downloading = false;
+							for (String l : validLines)
+								base64Buffer.append(l);
 						}
-					}
-					
-					sendSafely("", AID_CLEAR);
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Complete"));
-					
-					try {
-						byte[] decoded = java.util.Base64.getUrlDecoder().decode(base64Buffer.toString());
-						if (callback != null) callback.onDownloadComplete(decoded);
-					} catch (IllegalArgumentException e) {
-						if (callback != null) callback.onError("Base64 Decode: " + e.getMessage());
-					}
 
-				} catch (Exception e) {
-					SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Error"));
-					if (callback != null) callback.onError(e.getMessage());
-				} finally {
-					SwingUtilities.invokeLater(() -> {
-						terminalPanel.setPaintingEnabled(true);
-						terminalPanel.repaint();
-					});
+						// --- Advance ---
+						sendAID(AID_CLEAR);
+						Thread.sleep(250);
+						sendSafely("ACK", AID_ENTER);
+
+						chunkIndex++;
+					} else {
+						downloading = false;
+					}
 				}
-			}).start();
+
+				sendSafely("", AID_CLEAR);
+				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Complete"));
+
+				try {
+					// NORMALIZE: Ensure we have standard Base64 before decoding
+					// Replaces URL-safe chars (-_) with Standard (+/)
+					String standardB64 = base64Buffer.toString().replace('-', '+').replace('_', '/');
+
+					byte[] decoded = java.util.Base64.getDecoder().decode(standardB64);
+
+					if (callback != null)
+						callback.onDownloadComplete(decoded);
+				} catch (IllegalArgumentException e) {
+					if (callback != null)
+						callback.onError("Base64 Decode: " + e.getMessage());
+				}
+
+			} catch (Exception e) {
+				SwingUtilities.invokeLater(() -> statusBar.setStatus("Linux Download: Error"));
+				if (callback != null)
+					callback.onError(e.getMessage());
+			} finally {
+				SwingUtilities.invokeLater(() -> {
+					terminalPanel.setPaintingEnabled(true);
+					terminalPanel.repaint();
+				});
+			}
+		}).start();
+	}
+
+	/**
+	 * Types a string into the emulator as if the user typed it. Handles basic ASCII
+	 * mapping.
+	 */
+	private void sendText(String text) {
+		if (text == null)
+			return;
+		for (char c : text.toCharArray()) {
+			int p = screenModel.getCursorPos();
+			if (!screenModel.isProtected(p)) {
+				screenModel.setChar(p, c);
+				screenModel.setModified(p);
+				// Move cursor
+				int cols = screenModel.getCols();
+				int next = (p + 1) % screenModel.getSize();
+
+				// Handle wrap (simple) or field skip?
+				// For a paste/type operation, simple cursor move is usually enough
+				// unless we hit a protected field.
+				if (screenModel.isProtected(next)) {
+					// Try to find next unprotected field (Auto-Skip behavior)
+					next = screenModel.findNextField(next);
+					// If next field starts at 'next', we need to move 1 past the attribute byte
+					if (screenModel.isFieldStart(next)) {
+						next = (next + 1) % screenModel.getSize();
+					}
+				}
+				screenModel.setCursorPos(next);
+			} else {
+				// Tried to type in protected field. Skip or Stop?
+				// For a "Paste" operation, skipping to the next field is usually friendlier.
+				tabToNextField();
+				// Retry the character? Or just drop it?
+				// Usually dropping it is safer than desynchronizing the stream.
+			}
 		}
-		
-    /**
-     * Types a string into the emulator as if the user typed it.
-     * Handles basic ASCII mapping.
-     */
-    private void sendText(String text) {
-        if (text == null) return;
-        for (char c : text.toCharArray()) {
-            int p = screenModel.getCursorPos();
-            if (!screenModel.isProtected(p)) {
-                screenModel.setChar(p, c);
-                screenModel.setModified(p);
-                // Move cursor
-                int cols = screenModel.getCols();
-                int next = (p + 1) % screenModel.getSize();
-                
-                // Handle wrap (simple) or field skip?
-                // For a paste/type operation, simple cursor move is usually enough
-                // unless we hit a protected field.
-                if (screenModel.isProtected(next)) {
-                    // Try to find next unprotected field (Auto-Skip behavior)
-                    next = screenModel.findNextField(next);
-                    // If next field starts at 'next', we need to move 1 past the attribute byte
-                    if (screenModel.isFieldStart(next)) {
-                        next = (next + 1) % screenModel.getSize();
-                    }
-                }
-                screenModel.setCursorPos(next);
-            } else {
-                // Tried to type in protected field. Skip or Stop?
-                // For a "Paste" operation, skipping to the next field is usually friendlier.
-                tabToNextField();
-                // Retry the character? Or just drop it?
-                // Usually dropping it is safer than desynchronizing the stream.
-            }
-        }
-        // Do NOT call repaint() here for performance if we are in a loop; 
-        // let the caller handle repaints or the timer will pick it up.
-    }
-    
-    /**
+		// Do NOT call repaint() here for performance if we are in a loop;
+		// let the caller handle repaints or the timer will pick it up.
+	}
+
+	/**
 	 * Robust sender that handles the z/VM "NOT ACCEPTED" penalty box.
 	 */
-    /**
-	 * Robust sender that handles the z/VM "NOT ACCEPTED" penalty box.
-	 * Returns true if successful, false if retries exhausted.
+	/**
+	 * Robust sender that handles the z/VM "NOT ACCEPTED" penalty box. Returns true
+	 * if successful, false if retries exhausted.
 	 */
 	private boolean sendSafely(String text, int aid) throws InterruptedException {
 		int retries = 0;
 		// Increased retries to 10 to handle heavy load/slow guests
 		while (retries < 10) {
-			
+
 			// 1. PRE-CHECK: Am I already in the penalty box?
 			// If we try to type while "NOT ACCEPTED" is on screen, it will just fail again.
 			if (isStatusNotAccepted()) {
 				// System.out.println("Waiting for penalty box to clear...");
 				waitForStatusClear();
 				// Add a tiny breather after it clears to let CP buffers settle
-				Thread.sleep(100); 
+				Thread.sleep(100);
 			}
 
 			// 2. SEND: Type and Hit Enter
@@ -6240,7 +5128,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 			// 3. WAIT: Wait for Host Response (Unlock/Update)
 			synchronized (keyboardLockMonitor) {
-				keyboardLockMonitor.wait(5000); 
+				keyboardLockMonitor.wait(5000);
 			}
 
 			// 4. POST-CHECK: Did the host reject it?
@@ -6248,7 +5136,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				// The input we just sent was discarded.
 				// We must loop back and RE-SEND the text.
 				retries++;
-				
+
 				// Wait for the message to clear before the next loop iteration
 				waitForStatusClear();
 				Thread.sleep(200); // Extra safety buffer after a rejection
@@ -6257,14 +5145,15 @@ public class TN3270Session extends JPanel implements KeyListener {
 				return true;
 			}
 		}
-		
-		System.err.println("Failed to send text after " + retries + " retries.");
+
+		// System.err.println("Failed to send text after " + retries + " retries.");
+		logger.severe("Failed to send text after " + retries + " retries.");
 		return false;
 	}
-	
+
 	/**
-	 * Blocks until the "NOT ACCEPTED" status disappears from the screen
-	 * or a timeout occurs.
+	 * Blocks until the "NOT ACCEPTED" status disappears from the screen or a
+	 * timeout occurs.
 	 */
 	private void waitForStatusClear() {
 		long endTime = System.currentTimeMillis() + 5000; // 5s max wait
@@ -6272,7 +5161,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 			try {
 				synchronized (keyboardLockMonitor) {
 					// Wait for the next screen update from the host
-					keyboardLockMonitor.wait(500); 
+					keyboardLockMonitor.wait(500);
 				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -6280,59 +5169,73 @@ public class TN3270Session extends JPanel implements KeyListener {
 			}
 		}
 	}
-	
+
 	private boolean waitForString(String expected, int timeoutMs) {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            String content = screenModel.getString(0, screenModel.getSize());
-            if (content.contains(expected)) return true;
-            synchronized (keyboardLockMonitor) {
-                try { keyboardLockMonitor.wait(200); } 
-                catch (InterruptedException e) { return false; }
-            }
-        }
-        return false;
-    }
-	
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		while (System.currentTimeMillis() < deadline) {
+			String content = screenModel.getString(0, screenModel.getSize());
+			if (content.contains(expected))
+				return true;
+			synchronized (keyboardLockMonitor) {
+				try {
+					keyboardLockMonitor.wait(200);
+				} catch (InterruptedException e) {
+					return false;
+				}
+			}
+		}
+		return false;
+	}
+
 	// NEW Helper: Wait for one of multiple strings, return the one found
 	private String waitForAnyString(String[] expected, int timeoutMs) {
 		long deadline = System.currentTimeMillis() + timeoutMs;
 		while (System.currentTimeMillis() < deadline) {
 			String content = screenModel.getString(0, screenModel.getSize());
 			for (String s : expected) {
-				if (content.contains(s)) return s;
+				if (content.contains(s))
+					return s;
 			}
 			synchronized (keyboardLockMonitor) {
-				try { keyboardLockMonitor.wait(200); } 
-				catch (InterruptedException e) { return null; }
+				try {
+					keyboardLockMonitor.wait(200);
+				} catch (InterruptedException e) {
+					return null;
+				}
 			}
 		}
 		return null;
 	}
-	
+
 	/**
-	 * Scans the screen for markers, IGNORING lines that contain 'echo'.
-	 * This prevents false detection from command history.
+	 * Scans the screen for markers, IGNORING lines that contain 'echo'. This
+	 * prevents false detection from command history.
 	 */
 	private String waitForSmartMarker(String waitMarker, String eofMarker, int timeoutMs) {
 		long deadline = System.currentTimeMillis() + timeoutMs;
 		while (System.currentTimeMillis() < deadline) {
 			int rows = screenModel.getRows();
 			int cols = screenModel.getCols();
-			
+
 			for (int r = 0; r < rows; r++) {
 				String line = screenModel.getString(r * cols, cols);
-				
+
 				// CRITICAL FILTER: Ignore command history lines
-				if (line.contains("echo") || line.contains(">>")) continue;
-				
-				if (line.contains(waitMarker)) return waitMarker;
-				if (line.contains(eofMarker)) return eofMarker;
+				if (line.contains("echo") || line.contains(">>"))
+					continue;
+
+				if (line.contains(waitMarker))
+					return waitMarker;
+				if (line.contains(eofMarker))
+					return eofMarker;
 			}
-			
+
 			synchronized (keyboardLockMonitor) {
-				try { keyboardLockMonitor.wait(200); } 
-				catch (InterruptedException e) { return null; }
+				try {
+					keyboardLockMonitor.wait(200);
+				} catch (InterruptedException e) {
+					return null;
+				}
 			}
 		}
 		return null;

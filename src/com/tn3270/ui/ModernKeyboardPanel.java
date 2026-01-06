@@ -1,13 +1,39 @@
 package com.tn3270.ui;
 
+import static com.tn3270.constants.ProtocolConstants.AID_CLEAR;
+import static com.tn3270.constants.ProtocolConstants.AID_ENTER;
+import static com.tn3270.constants.ProtocolConstants.AID_PA1;
+import static com.tn3270.constants.ProtocolConstants.AID_PA2;
+import static com.tn3270.constants.ProtocolConstants.AID_PA3;
+import static com.tn3270.constants.ProtocolConstants.AID_PF1;
+import static com.tn3270.constants.ProtocolConstants.AID_PF10;
+import static com.tn3270.constants.ProtocolConstants.AID_PF11;
+import static com.tn3270.constants.ProtocolConstants.AID_PF12;
+import static com.tn3270.constants.ProtocolConstants.AID_PF13;
+import static com.tn3270.constants.ProtocolConstants.AID_PF22;
+import static com.tn3270.constants.ProtocolConstants.AID_PF23;
+import static com.tn3270.constants.ProtocolConstants.AID_PF24;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.RenderingHints;
+import java.awt.event.ActionListener;
+
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.border.EmptyBorder;
+
 import com.tn3270.TN3270Emulator;
 import com.tn3270.TN3270Session;
-import static com.tn3270.constants.ProtocolConstants.*;
-
-import javax.swing.*;
-import javax.swing.border.*;
-import java.awt.*;
-import java.awt.event.*;
 
 public class ModernKeyboardPanel extends JPanel {
     private TN3270Emulator emulator;
@@ -133,7 +159,7 @@ public class ModernKeyboardPanel extends JPanel {
         JPanel kbStatus = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.setFont(new Font("SansSerif", Font.BOLD, 9));
+				g.setFont(new Font("SansSerif", Font.BOLD, 9));
                 
                 TN3270Session s = emulator.getCurrentSession();
                 boolean locked = (s != null && s.keyboardLocked);

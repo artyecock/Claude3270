@@ -1,215 +1,242 @@
 package com.tn3270.ui;
 
-import com.tn3270.TN3270Emulator;
-import com.tn3270.ai.AIManager;
-
-import javax.swing.*;
-import javax.swing.border.Border;
-import javax.swing.border.MatteBorder;
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 
+import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JSeparator;
+import javax.swing.SwingConstants;
+import javax.swing.border.Border;
+import javax.swing.border.MatteBorder;
+
+import com.tn3270.TN3270Emulator;
+import com.tn3270.ai.AIManager;
+
 public class EnhancedRibbonToolbar extends JPanel {
-    private TN3270Emulator emulator;
+	private TN3270Emulator emulator;
 
-    public EnhancedRibbonToolbar(TN3270Emulator emulator) {
-        this.emulator = emulator;
-        
-        // BorderLayout ensures we fill the width of the Frame
-        setLayout(new BorderLayout());
-        setBackground(new Color(245, 245, 245));
-        
-        // Use a MatteBorder for the bottom line - guarantees full width stretch
-        setBorder(new MatteBorder(0, 0, 1, 0, new Color(200, 200, 200)));
+	public EnhancedRibbonToolbar(TN3270Emulator emulator) {
+		this.emulator = emulator;
 
-        // Button Container
-        // FlowLayout.LEFT ensures buttons stay packed to the left
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-        buttonPanel.setOpaque(false);
+		// BorderLayout ensures we fill the width of the Frame
+		setLayout(new BorderLayout());
+		setBackground(new Color(245, 245, 245));
 
-        // --- Connection Group ---
-        // FIX: Pass 'emulator' instance so the dialog knows where to add the tab
-        buttonPanel.add(createButton("new_conn", "New Connection", e -> TN3270Emulator.showConnectionDialog(emulator)));
-        buttonPanel.add(createButton("disconnect", "Disconnect", e -> emulator.disconnect()));
-        buttonPanel.add(createButton("reconnect", "Reconnect", e -> emulator.reconnect()));
-        buttonPanel.add(createSeparator());
+		// Use a MatteBorder for the bottom line - guarantees full width stretch
+		setBorder(new MatteBorder(0, 0, 1, 0, new Color(200, 200, 200)));
 
-        // --- File Transfer Group ---
-        buttonPanel.add(createButton("upload", "Upload to Host", e -> emulator.showFileTransferDialog(false)));
-        buttonPanel.add(createButton("download", "Download from Host", e -> emulator.showFileTransferDialog(true)));
-        buttonPanel.add(createSeparator());
+		// Button Container
+		// FlowLayout.LEFT ensures buttons stay packed to the left
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+		buttonPanel.setOpaque(false);
 
-        // --- Edit Group ---
-        buttonPanel.add(createButton("copy", "Copy", e -> emulator.copySelection()));
-        buttonPanel.add(createButton("paste", "Paste", e -> emulator.pasteFromClipboard()));
-        buttonPanel.add(createButton("select_all", "Select All", e -> emulator.selectAll()));
-        buttonPanel.add(createSeparator());
+		// --- Connection Group ---
+		// FIX: Pass 'emulator' instance so the dialog knows where to add the tab
+		buttonPanel.add(createButton("new_conn", "New Connection", e -> TN3270Emulator.showConnectionDialog(emulator)));
+		buttonPanel.add(createButton("disconnect", "Disconnect", e -> emulator.disconnect()));
+		buttonPanel.add(createButton("reconnect", "Reconnect", e -> emulator.reconnect()));
+		buttonPanel.add(createSeparator());
 
-        // --- Settings/View Group ---
-        buttonPanel.add(createButton("colors", "Color Scheme", e -> emulator.showColorSchemeDialog()));
-        buttonPanel.add(createButton("font", "Font Size", e -> emulator.showFontSizeDialog()));
-        buttonPanel.add(createButton("keyboard", "Keyboard Mapping", e -> emulator.showKeyboardMappingDialog()));
-        buttonPanel.add(createButton("terminal", "Terminal Settings", e -> emulator.showTerminalSettingsDialog()));
-        
-        // --- AI Group ---
-        buttonPanel.add(createSeparator());
-        buttonPanel.add(createButton("ai_sparkles", "Ask AI", 
-            e -> AIManager.getInstance().showChatDialog(emulator, emulator.getSelectedText())));
-        
-        add(buttonPanel, BorderLayout.CENTER);
-    }
+		// --- File Transfer Group ---
+		buttonPanel.add(createButton("upload", "Upload to Host", e -> emulator.showFileTransferDialog(false)));
+		buttonPanel.add(createButton("download", "Download from Host", e -> emulator.showFileTransferDialog(true)));
+		buttonPanel.add(createSeparator());
 
-    private Component createSeparator() {
-        JSeparator s = new JSeparator(SwingConstants.VERTICAL);
-        s.setPreferredSize(new Dimension(2, 24));
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
-        p.setOpaque(false);
-        p.add(s);
-        return p;
-    }
+		// --- Edit Group ---
+		buttonPanel.add(createButton("copy", "Copy", e -> emulator.copySelection()));
+		buttonPanel.add(createButton("paste", "Paste", e -> emulator.pasteFromClipboard()));
+		buttonPanel.add(createButton("select_all", "Select All", e -> emulator.selectAll()));
+		buttonPanel.add(createSeparator());
 
-    private JButton createButton(String iconName, String toolTip, ActionListener action) {
-        BufferedImage img = createEnhancedIcon(iconName);
-        ImageIcon icon = new ImageIcon(img);
+		// --- Settings/View Group ---
+		buttonPanel.add(createButton("colors", "Color Scheme", e -> emulator.showColorSchemeDialog()));
+		buttonPanel.add(createButton("font", "Font Size", e -> emulator.showFontSizeDialog()));
+		buttonPanel.add(createButton("keyboard", "Keyboard Mapping", e -> emulator.showKeyboardMappingDialog()));
+		buttonPanel.add(createButton("terminal", "Terminal Settings", e -> emulator.showTerminalSettingsDialog()));
 
-        JButton btn = new JButton(icon);
-        btn.setToolTipText(toolTip);
-        btn.addActionListener(action);
+		// --- AI Group ---
+		buttonPanel.add(createSeparator());
+		buttonPanel.add(createButton("ai_sparkles", "Ask AI",
+				e -> AIManager.getInstance().showChatDialog(emulator, emulator.getSelectedText())));
 
-        // Fixed size to prevent shrinking/jumping
-        Dimension fixedSize = new Dimension(40, 34);
-        btn.setPreferredSize(fixedSize);
-        btn.setMinimumSize(fixedSize);
-        btn.setMaximumSize(fixedSize);
+		add(buttonPanel, BorderLayout.CENTER);
+	}
 
-        btn.setFocusable(false);
-        btn.setBorderPainted(false);
-        btn.setContentAreaFilled(false);
-        
-        // Invisible border for spacing
-        Border emptyBorder = BorderFactory.createEmptyBorder(1, 1, 1, 1);
-        Border hoverBorder = BorderFactory.createLineBorder(new Color(180, 200, 220), 1);
-        btn.setBorder(emptyBorder);
+	private Component createSeparator() {
+		JSeparator s = new JSeparator(SwingConstants.VERTICAL);
+		s.setPreferredSize(new Dimension(2, 24));
+		JPanel p = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+		p.setOpaque(false);
+		p.add(s);
+		return p;
+	}
 
-        btn.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                if (btn.isEnabled()) {
-                    btn.setContentAreaFilled(true);
-                    btn.setBackground(new Color(225, 230, 240));
-                    btn.setBorderPainted(true);
-                    btn.setBorder(hoverBorder);
-                }
-            }
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                btn.setContentAreaFilled(false);
-                btn.setBorderPainted(false);
-                btn.setBorder(emptyBorder);
-            }
-        });
-        return btn;
-    }
+	private JButton createButton(String iconName, String toolTip, ActionListener action) {
+		BufferedImage img = createEnhancedIcon(iconName);
+		ImageIcon icon = new ImageIcon(img);
 
-    private BufferedImage createEnhancedIcon(String name) {
-        BufferedImage img = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+		JButton btn = new JButton(icon);
+		btn.setToolTipText(toolTip);
+		btn.addActionListener(action);
 
-        switch (name) {
-            case "new_conn":
-                g.setColor(new Color(70, 130, 180));
-                g.fillRoundRect(4, 8, 24, 16, 4, 4);
-                g.setColor(new Color(100, 160, 210));
-                g.fillRoundRect(6, 10, 20, 12, 2, 2);
-                g.setColor(new Color(50, 180, 50));
-                g.fillOval(24, 4, 6, 6);
-                break;
-            case "disconnect":
-                g.setColor(new Color(180, 70, 70));
-                g.fillRoundRect(4, 8, 24, 16, 4, 4);
-                g.setColor(Color.WHITE);
-                g.setStroke(new BasicStroke(2.5f));
-                g.drawLine(10, 14, 22, 20);
-                g.drawLine(22, 14, 10, 20);
-                break;
-            case "reconnect":
-                g.setColor(new Color(70, 130, 180));
-                g.drawArc(8, 8, 16, 16, 45, 270);
-                int[] xPoints = { 24, 28, 24 };
-                int[] yPoints = { 12, 16, 20 };
-                g.fillPolygon(xPoints, yPoints, 3);
-                break;
-            case "upload":
-                g.setColor(new Color(50, 120, 200));
-                g.fillRect(10, 18, 12, 10);
-                g.setColor(new Color(80, 150, 230));
-                g.fillPolygon(new int[]{16, 8, 16, 16, 24, 16}, new int[]{6, 16, 16, 26, 16, 6}, 6);
-                break;
-            case "download":
-                g.setColor(new Color(50, 120, 200));
-                g.fillRect(10, 4, 12, 10);
-                g.setColor(new Color(80, 150, 230));
-                g.fillPolygon(new int[]{16, 8, 16, 16, 24, 16}, new int[]{26, 16, 16, 6, 16, 26}, 6);
-                break;
-            case "copy":
-                g.setColor(new Color(100, 100, 100));
-                g.fillRoundRect(8, 10, 14, 18, 2, 2);
-                g.setColor(new Color(150, 150, 150));
-                g.fillRoundRect(12, 6, 14, 18, 2, 2);
-                g.setColor(Color.WHITE);
-                g.drawLine(14, 10, 22, 10); g.drawLine(14, 14, 22, 14); g.drawLine(14, 18, 22, 18);
-                break;
-            case "paste":
-                g.setColor(new Color(120, 120, 120));
-                g.fillRoundRect(8, 8, 16, 20, 2, 2);
-                g.setColor(new Color(180, 180, 180));
-                g.fillRoundRect(12, 4, 8, 6, 2, 2);
-                g.setColor(Color.WHITE);
-                g.fillRect(11, 12, 10, 2); g.fillRect(11, 16, 10, 2); g.fillRect(11, 20, 10, 2);
-                break;
-            case "select_all":
-                g.setColor(new Color(100, 150, 255));
-                g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{4.0f}, 0.0f));
-                g.drawRect(6, 6, 20, 20);
-                g.setColor(new Color(100, 150, 255, 50));
-                g.fillRect(7, 7, 18, 18);
-                break;
-            case "colors":
-                g.setColor(Color.RED); g.fillOval(6, 6, 10, 10);
-                g.setColor(Color.GREEN); g.fillOval(18, 6, 10, 10);
-                g.setColor(Color.BLUE); g.fillOval(6, 18, 10, 10);
-                g.setColor(Color.YELLOW); g.fillOval(18, 18, 10, 10);
-                break;
-            case "font":
-                g.setColor(Color.BLACK);
-                g.setFont(new Font("SansSerif", Font.BOLD, 20));
-                g.drawString("Aa", 6, 24);
-                break;
-            case "keyboard":
-                g.setColor(new Color(80, 80, 80));
-                g.fillRoundRect(4, 10, 24, 16, 3, 3);
-                g.setColor(new Color(200, 200, 200));
-                for(int i=0; i<3; i++) for(int j=0; j<6; j++) g.fillRect(6+j*4, 12+i*4, 2, 3);
-                break;
-            case "terminal":
-                g.setColor(new Color(60, 60, 60));
-                g.fillRoundRect(4, 4, 24, 20, 4, 4);
-                g.setColor(new Color(50, 200, 50));
-                g.fillRect(7, 7, 18, 14);
-                g.setColor(new Color(60, 60, 60));
-                g.fillRect(10, 24, 12, 3); g.fillRect(8, 27, 16, 2);
-                break;
-            case "ai_sparkles":
-                g.setColor(new Color(85, 80, 230));
-                g.fillRoundRect(1, 1, 22, 17, 7, 7);
-                g.fillPolygon(new int[]{5, 5, 1}, new int[]{17, 23, 17}, 3);
-                g.setColor(Color.WHITE);
-                g.fillPolygon(new int[]{12, 17, 12, 7}, new int[]{5, 10, 15, 10}, 4);
-                g.fillPolygon(new int[]{18, 20, 18, 16}, new int[]{4, 6, 8, 6}, 4);
-                break;
-        }
-        g.dispose();
-        return img;
-    }
+		// Fixed size to prevent shrinking/jumping
+		Dimension fixedSize = new Dimension(40, 34);
+		btn.setPreferredSize(fixedSize);
+		btn.setMinimumSize(fixedSize);
+		btn.setMaximumSize(fixedSize);
+
+		btn.setFocusable(false);
+		btn.setBorderPainted(false);
+		btn.setContentAreaFilled(false);
+
+		// Invisible border for spacing
+		Border emptyBorder = BorderFactory.createEmptyBorder(1, 1, 1, 1);
+		Border hoverBorder = BorderFactory.createLineBorder(new Color(180, 200, 220), 1);
+		btn.setBorder(emptyBorder);
+
+		btn.addMouseListener(new java.awt.event.MouseAdapter() {
+			public void mouseEntered(java.awt.event.MouseEvent evt) {
+				if (btn.isEnabled()) {
+					btn.setContentAreaFilled(true);
+					btn.setBackground(new Color(225, 230, 240));
+					btn.setBorderPainted(true);
+					btn.setBorder(hoverBorder);
+				}
+			}
+
+			public void mouseExited(java.awt.event.MouseEvent evt) {
+				btn.setContentAreaFilled(false);
+				btn.setBorderPainted(false);
+				btn.setBorder(emptyBorder);
+			}
+		});
+		return btn;
+	}
+
+	private BufferedImage createEnhancedIcon(String name) {
+		BufferedImage img = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+		switch (name) {
+		case "new_conn":
+			g.setColor(new Color(70, 130, 180));
+			g.fillRoundRect(4, 8, 24, 16, 4, 4);
+			g.setColor(new Color(100, 160, 210));
+			g.fillRoundRect(6, 10, 20, 12, 2, 2);
+			g.setColor(new Color(50, 180, 50));
+			g.fillOval(24, 4, 6, 6);
+			break;
+		case "disconnect":
+			g.setColor(new Color(180, 70, 70));
+			g.fillRoundRect(4, 8, 24, 16, 4, 4);
+			g.setColor(Color.WHITE);
+			g.setStroke(new BasicStroke(2.5f));
+			g.drawLine(10, 14, 22, 20);
+			g.drawLine(22, 14, 10, 20);
+			break;
+		case "reconnect":
+			g.setColor(new Color(70, 130, 180));
+			g.drawArc(8, 8, 16, 16, 45, 270);
+			int[] xPoints = { 24, 28, 24 };
+			int[] yPoints = { 12, 16, 20 };
+			g.fillPolygon(xPoints, yPoints, 3);
+			break;
+		case "upload":
+			g.setColor(new Color(50, 120, 200));
+			g.fillRect(10, 18, 12, 10);
+			g.setColor(new Color(80, 150, 230));
+			g.fillPolygon(new int[] { 16, 8, 16, 16, 24, 16 }, new int[] { 6, 16, 16, 26, 16, 6 }, 6);
+			break;
+		case "download":
+			g.setColor(new Color(50, 120, 200));
+			g.fillRect(10, 4, 12, 10);
+			g.setColor(new Color(80, 150, 230));
+			g.fillPolygon(new int[] { 16, 8, 16, 16, 24, 16 }, new int[] { 26, 16, 16, 6, 16, 26 }, 6);
+			break;
+		case "copy":
+			g.setColor(new Color(100, 100, 100));
+			g.fillRoundRect(8, 10, 14, 18, 2, 2);
+			g.setColor(new Color(150, 150, 150));
+			g.fillRoundRect(12, 6, 14, 18, 2, 2);
+			g.setColor(Color.WHITE);
+			g.drawLine(14, 10, 22, 10);
+			g.drawLine(14, 14, 22, 14);
+			g.drawLine(14, 18, 22, 18);
+			break;
+		case "paste":
+			g.setColor(new Color(120, 120, 120));
+			g.fillRoundRect(8, 8, 16, 20, 2, 2);
+			g.setColor(new Color(180, 180, 180));
+			g.fillRoundRect(12, 4, 8, 6, 2, 2);
+			g.setColor(Color.WHITE);
+			g.fillRect(11, 12, 10, 2);
+			g.fillRect(11, 16, 10, 2);
+			g.fillRect(11, 20, 10, 2);
+			break;
+		case "select_all":
+			g.setColor(new Color(100, 150, 255));
+			g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] { 4.0f },
+					0.0f));
+			g.drawRect(6, 6, 20, 20);
+			g.setColor(new Color(100, 150, 255, 50));
+			g.fillRect(7, 7, 18, 18);
+			break;
+		case "colors":
+			g.setColor(Color.RED);
+			g.fillOval(6, 6, 10, 10);
+			g.setColor(Color.GREEN);
+			g.fillOval(18, 6, 10, 10);
+			g.setColor(Color.BLUE);
+			g.fillOval(6, 18, 10, 10);
+			g.setColor(Color.YELLOW);
+			g.fillOval(18, 18, 10, 10);
+			break;
+		case "font":
+			g.setColor(Color.BLACK);
+			g.setFont(new Font("SansSerif", Font.BOLD, 20));
+			g.drawString("Aa", 6, 24);
+			break;
+		case "keyboard":
+			g.setColor(new Color(80, 80, 80));
+			g.fillRoundRect(4, 10, 24, 16, 3, 3);
+			g.setColor(new Color(200, 200, 200));
+			for (int i = 0; i < 3; i++)
+				for (int j = 0; j < 6; j++)
+					g.fillRect(6 + j * 4, 12 + i * 4, 2, 3);
+			break;
+		case "terminal":
+			g.setColor(new Color(60, 60, 60));
+			g.fillRoundRect(4, 4, 24, 20, 4, 4);
+			g.setColor(new Color(50, 200, 50));
+			g.fillRect(7, 7, 18, 14);
+			g.setColor(new Color(60, 60, 60));
+			g.fillRect(10, 24, 12, 3);
+			g.fillRect(8, 27, 16, 2);
+			break;
+		case "ai_sparkles":
+			g.setColor(new Color(85, 80, 230));
+			g.fillRoundRect(1, 1, 22, 17, 7, 7);
+			g.fillPolygon(new int[] { 5, 5, 1 }, new int[] { 17, 23, 17 }, 3);
+			g.setColor(Color.WHITE);
+			g.fillPolygon(new int[] { 12, 17, 12, 7 }, new int[] { 5, 10, 15, 10 }, 4);
+			g.fillPolygon(new int[] { 18, 20, 18, 16 }, new int[] { 4, 6, 8, 6 }, 4);
+			break;
+		}
+		g.dispose();
+		return img;
+	}
 }

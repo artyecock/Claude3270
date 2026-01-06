@@ -37,7 +37,7 @@ public class ScreenModel {
 	// Temp holders for current processing context
 	private byte currentColor = 0;
 	private byte currentHighlight = 0;
-	private byte currentCharset = 0; 
+	private byte currentCharset = 0;
 
 	public ScreenModel(String modelName, Map<String, Dimension> models) {
 		this.modelName = modelName;
@@ -58,7 +58,7 @@ public class ScreenModel {
 		attributes = new byte[size];
 		extendedColors = new byte[size];
 		highlighting = new byte[size];
-		charsets = new byte[size]; 
+		charsets = new byte[size];
 
 		clearScreen();
 	}
@@ -68,7 +68,7 @@ public class ScreenModel {
 		Arrays.fill(attributes, (byte) 0);
 		Arrays.fill(extendedColors, (byte) 0);
 		Arrays.fill(highlighting, (byte) 0);
-		Arrays.fill(charsets, (byte) 0); 
+		Arrays.fill(charsets, (byte) 0);
 		cursorPos = 0;
 	}
 
@@ -79,8 +79,13 @@ public class ScreenModel {
 
 	// --- Data Accessors ---
 	public int getSize() {
-		return buffer.length;
+		// Return the Logical Screen Size (Rows * Cols)
+		// NOT the physical buffer size (which is padded to 4000)
+		return rows * cols;
 	}
+	//public int getSize() {
+	//	return buffer.length;
+	//}
 
 	public char getChar(int i) {
 		return (i >= 0 && i < buffer.length) ? buffer[i] : '\0';
@@ -137,7 +142,7 @@ public class ScreenModel {
 
 	public byte[] getCharsets() {
 		return charsets;
-	} 
+	}
 
 	// --- State Accessors ---
 	public int getRows() {

@@ -1,404 +1,450 @@
 package com.tn3270.ai;
 
-import com.tn3270.ui.RoundedBorder;
-import com.tn3270.TN3270Emulator;
-import com.tn3270.TN3270Session;
-import com.tn3270.ai.AIManager; // For helpers
-
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import javax.swing.border.MatteBorder;
-import java.awt.*;
-import java.awt.event.*;
-
+import java.awt.BorderLayout;
+import java.awt.Choice;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.EventQueue;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Toolkit;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.nio.charset.StandardCharsets;
 
+import javax.swing.AbstractButton;
+import javax.swing.Box;
+import javax.swing.ButtonModel;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
+
 public class AIChatWindow extends JDialog {
-    private final Frame owner;
-    public final AIChatScrollView chatView;
-    private final JTextArea inputArea;
-    private final Choice modelChoice;
-    private final JButton sendBtn, tryNextBtn, saveBtn, loadBtn, prefsBtn;
-    private final JLabel spinner;
-    private final AIStreamingClient streamingClient;
-    private final AIHistoryStore historyStore;
-    private final AIConfig config;
-    private String lastPrompt = null;
+	private final Frame owner;
+	public final AIChatScrollView chatView;
+	private final JTextArea inputArea;
+	private final Choice modelChoice;
+	private final JButton sendBtn, tryNextBtn, saveBtn, loadBtn, prefsBtn;
+	private final JLabel spinner;
+	private final AIStreamingClient streamingClient;
+	private final AIHistoryStore historyStore;
+	private final AIConfig config;
+	private String lastPrompt = null;
 
-    private final Color BG_MAIN = new Color(245, 247, 250);
-    private final Color BG_INPUT = Color.WHITE;
-    private final Color TEXT_COLOR = new Color(30, 30, 30);
-    
-    private final com.tn3270.TN3270Emulator emulator;
+	private final Color BG_MAIN = new Color(245, 247, 250);
+	private final Color BG_INPUT = Color.WHITE;
+	private final Color TEXT_COLOR = new Color(30, 30, 30);
 
-    public AIChatWindow(Frame owner, AIModelProvider prov, AIConfig cfg) {
-        super((Frame) null, "AI Assistant", false); 
-        
-        this.owner = owner;
-        this.config = cfg;
-        this.streamingClient = new AIStreamingClient(prov);
-        //this.historyStore = new AIHistoryStore(cfg.get("ai.autosave.dir", "ai_history"));
-        // --- FIX: Anchor history directory to User Home ---
-        String rawDir = cfg.get("ai.autosave.dir", "ai_history");
-        java.io.File dir = new java.io.File(rawDir);
-        
-        // If the path is relative (e.g. "ai_history"), prepend user.home
-        if (!dir.isAbsolute()) {
-            dir = new java.io.File(System.getProperty("user.home"), rawDir);
-        }
-        
-        this.historyStore = new AIHistoryStore(dir.getAbsolutePath());
-        
-        // Cast owner to emulator
-        this.emulator = (owner instanceof com.tn3270.TN3270Emulator) ? (com.tn3270.TN3270Emulator) owner : null;
+	private final com.tn3270.TN3270Emulator emulator;
 
-        setLayout(new BorderLayout());
-        setSize(950, 750);
-        getContentPane().setBackground(BG_MAIN);
+	public AIChatWindow(Frame owner, AIModelProvider prov, AIConfig cfg) {
+		super((Frame) null, "AI Assistant", false);
 
-        // --- TOP TOOLBAR ---
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 12));
-        top.setBackground(Color.WHITE);
-        top.setBorder(new MatteBorder(0, 0, 1, 0, new Color(230, 230, 230)));
+		this.owner = owner;
+		this.config = cfg;
+		this.streamingClient = new AIStreamingClient(prov);
+		// this.historyStore = new AIHistoryStore(cfg.get("ai.autosave.dir",
+		// "ai_history"));
+		// --- FIX: Anchor history directory to User Home ---
+		String rawDir = cfg.get("ai.autosave.dir", "ai_history");
+		java.io.File dir = new java.io.File(rawDir);
 
-        JLabel lblModel = new JLabel("Model:");
-        lblModel.setFont(new Font("SansSerif", Font.BOLD, 12));
+		// If the path is relative (e.g. "ai_history"), prepend user.home
+		if (!dir.isAbsolute()) {
+			dir = new java.io.File(System.getProperty("user.home"), rawDir);
+		}
 
-        modelChoice = new Choice();
-        //for (String m : cfg.getModels()) modelChoice.add(m);
-        // Ask the provider (AIManager) for the aggregated list
-        for (String m : prov.listModels()) modelChoice.add(m);
+		this.historyStore = new AIHistoryStore(dir.getAbsolutePath());
 
-        sendBtn    = createColorButton("Send",    new Color(0, 120, 215), Color.WHITE);
-        tryNextBtn = createColorButton("Retry",   new Color(255, 140, 0), Color.WHITE);
-        
-        // --- NEW BUTTONS ---
-        JButton attachBtn = createColorButton("Attach Host", new Color(102, 51, 153), Color.WHITE); // Purple
-        JButton saveHostBtn = createColorButton("Save Host", new Color(70, 130, 180), Color.WHITE); // Steel Blue
-        
-        saveBtn    = createColorButton("Save",    new Color(40, 167, 69), Color.WHITE);
-        loadBtn    = createColorButton("Load",    new Color(108, 117, 125), Color.WHITE);
-        prefsBtn   = createColorButton("Config",  new Color(23, 162, 184), Color.WHITE);
+		// Cast owner to emulator
+		this.emulator = (owner instanceof com.tn3270.TN3270Emulator) ? (com.tn3270.TN3270Emulator) owner : null;
 
-        spinner = new JLabel("Idle");
-        spinner.setForeground(Color.GRAY);
-        spinner.setFont(new Font("SansSerif", Font.ITALIC, 11));
+		setLayout(new BorderLayout());
+		setSize(950, 750);
+		getContentPane().setBackground(BG_MAIN);
 
-        top.add(lblModel);
-        top.add(modelChoice);
-        top.add(Box.createHorizontalStrut(15));
-        top.add(sendBtn);
-        top.add(tryNextBtn);
-        top.add(Box.createHorizontalStrut(15));
-        top.add(attachBtn);
-        top.add(saveHostBtn);
-        top.add(Box.createHorizontalStrut(15));
-        top.add(saveBtn);
-        top.add(loadBtn);
-        top.add(Box.createHorizontalStrut(15));
-        top.add(prefsBtn);
-        top.add(Box.createHorizontalStrut(15));
-        top.add(spinner);
+		// --- TOP TOOLBAR ---
+		JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 12));
+		top.setBackground(Color.WHITE);
+		top.setBorder(new MatteBorder(0, 0, 1, 0, new Color(230, 230, 230)));
 
-        add(top, BorderLayout.NORTH);
+		JLabel lblModel = new JLabel("Model:");
+		lblModel.setFont(new Font("SansSerif", Font.BOLD, 12));
 
-        Font chatFont = new Font("Monospaced", Font.PLAIN, 13);
-        //chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE);
-        // Pass 'this::saveTextToHost' as the "OnSave" callback
-        chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE, this::saveTextToHost);
-        
-        JPanel chatWrapper = new JPanel(new BorderLayout());
-        chatWrapper.setBackground(Color.WHITE);
-        chatWrapper.setBorder(new EmptyBorder(0, 0, 0, 0));
-        chatWrapper.add(chatView, BorderLayout.CENTER);
-        add(chatWrapper, BorderLayout.CENTER);
+		modelChoice = new Choice();
+		// for (String m : cfg.getModels()) modelChoice.add(m);
+		// Ask the provider (AIManager) for the aggregated list
+		for (String m : prov.listModels())
+			modelChoice.add(m);
 
-        JPanel bottom = new JPanel(new BorderLayout(0, 8)); 
-        bottom.setBackground(BG_MAIN);
-        bottom.setBorder(new EmptyBorder(15, 20, 15, 20));
+		sendBtn = createColorButton("Send", new Color(0, 120, 215), Color.WHITE);
+		tryNextBtn = createColorButton("Retry", new Color(255, 140, 0), Color.WHITE);
 
-        JLabel greeting = new JLabel("Hi, what can I help you with?");
-        greeting.setFont(new Font("SansSerif", Font.BOLD, 14));
-        greeting.setForeground(new Color(80, 80, 90));
-        bottom.add(greeting, BorderLayout.NORTH);
+		// --- NEW BUTTONS ---
+		JButton attachBtn = createColorButton("Attach Host", new Color(102, 51, 153), Color.WHITE); // Purple
+		JButton saveHostBtn = createColorButton("Save Host", new Color(70, 130, 180), Color.WHITE); // Steel Blue
 
-        inputArea = new JTextArea(3, 80);
-        inputArea.setFont(chatFont);
-        inputArea.setBackground(BG_INPUT);
-        inputArea.setForeground(TEXT_COLOR);
-        inputArea.setCaretColor(TEXT_COLOR);
-        inputArea.setLineWrap(true);
-        inputArea.setWrapStyleWord(true);
-        inputArea.setBorder(new EmptyBorder(8, 8, 8, 8)); 
+		saveBtn = createColorButton("Save", new Color(40, 167, 69), Color.WHITE);
+		loadBtn = createColorButton("Load", new Color(108, 117, 125), Color.WHITE);
+		prefsBtn = createColorButton("Config", new Color(23, 162, 184), Color.WHITE);
 
-        JScrollPane inputScroll = new JScrollPane(inputArea);
-        // Local RoundedBorder definition or import needed.
-        // For simplicity, let's define it locally or import it.
-        // Assuming com.tn3270.ui.RoundedBorder exists (we will create it).
-        inputScroll.setBorder(new com.tn3270.ui.RoundedBorder(12, new Color(200, 200, 200)));
-        inputScroll.setBackground(BG_MAIN); 
-        inputScroll.getViewport().setBackground(BG_INPUT);
+		spinner = new JLabel("Idle");
+		spinner.setForeground(Color.GRAY);
+		spinner.setFont(new Font("SansSerif", Font.ITALIC, 11));
 
-        bottom.add(inputScroll, BorderLayout.CENTER);
+		top.add(lblModel);
+		top.add(modelChoice);
+		top.add(Box.createHorizontalStrut(15));
+		top.add(sendBtn);
+		top.add(tryNextBtn);
+		top.add(Box.createHorizontalStrut(15));
+		top.add(attachBtn);
+		top.add(saveHostBtn);
+		top.add(Box.createHorizontalStrut(15));
+		top.add(saveBtn);
+		top.add(loadBtn);
+		top.add(Box.createHorizontalStrut(15));
+		top.add(prefsBtn);
+		top.add(Box.createHorizontalStrut(15));
+		top.add(spinner);
 
-        JLabel hint = new JLabel("Enter to send, Shift+Enter for newline");
-        hint.setForeground(Color.GRAY);
-        hint.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        hint.setHorizontalAlignment(SwingConstants.RIGHT);
-        bottom.add(hint, BorderLayout.SOUTH);
+		add(top, BorderLayout.NORTH);
 
-        add(bottom, BorderLayout.SOUTH);
+		Font chatFont = new Font("Monospaced", Font.PLAIN, 13);
+		// chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE);
+		// Pass 'this::saveTextToHost' as the "OnSave" callback
+		chatView = new AIChatScrollView(chatFont, TEXT_COLOR, Color.WHITE, this::saveTextToHost);
 
-        sendBtn.addActionListener(e -> doSend());
-        tryNextBtn.addActionListener(e -> doTryNext());
-        
-        attachBtn.addActionListener(e -> doAttachHostFile());
-        saveHostBtn.addActionListener(e -> doSaveToHost());
-        
-        prefsBtn.addActionListener(e -> new AIPreferencesPanel(owner, config).showDialog());
+		JPanel chatWrapper = new JPanel(new BorderLayout());
+		chatWrapper.setBackground(Color.WHITE);
+		chatWrapper.setBorder(new EmptyBorder(0, 0, 0, 0));
+		chatWrapper.add(chatView, BorderLayout.CENTER);
+		add(chatWrapper, BorderLayout.CENTER);
 
-        inputArea.addKeyListener(new KeyAdapter() {
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER && !e.isShiftDown()) {
-                    e.consume();
-                    doSend();
-                }
-            }
-        });
+		JPanel bottom = new JPanel(new BorderLayout(0, 8));
+		bottom.setBackground(BG_MAIN);
+		bottom.setBorder(new EmptyBorder(15, 20, 15, 20));
 
-        JPopupMenu popup = new JPopupMenu();
-        JMenuItem cut = new JMenuItem("Cut");
-        cut.addActionListener(e -> inputArea.cut());
-        JMenuItem copy = new JMenuItem("Copy");
-        copy.addActionListener(e -> inputArea.copy());
-        JMenuItem paste = new JMenuItem("Paste");
-        paste.addActionListener(e -> inputArea.paste());
-        popup.add(cut); popup.add(copy); popup.add(paste);
-        inputArea.setComponentPopupMenu(popup);
-    }
+		JLabel greeting = new JLabel("Hi, what can I help you with?");
+		greeting.setFont(new Font("SansSerif", Font.BOLD, 14));
+		greeting.setForeground(new Color(80, 80, 90));
+		bottom.add(greeting, BorderLayout.NORTH);
 
-    private JButton createColorButton(String text, Color baseColor, Color textColor) {
-        JButton btn = new JButton(text);
-        btn.setBackground(baseColor);
-        btn.setForeground(textColor);
-        btn.setFocusPainted(false);
-        btn.setFont(new Font("SansSerif", Font.BOLD, 11));
-        
-        btn.setBorder(new javax.swing.border.CompoundBorder(
-            new com.tn3270.ui.RoundedBorder(10, baseColor.darker()),
-            new javax.swing.border.EmptyBorder(4, 12, 4, 12)
-        ));
-        
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setContentAreaFilled(false);
-        btn.setOpaque(false);
-        
-        btn.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
-            @Override
-            public void paint(Graphics g, JComponent c) {
-                AbstractButton b = (AbstractButton) c;
-                ButtonModel model = b.getModel();
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                
-                Color fill = baseColor;
-                if (model.isPressed()) fill = baseColor.darker();
-                else if (model.isRollover()) fill = baseColor.brighter();
-                
-                g2.setColor(fill);
-                g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 10, 10);
-                
-                super.paint(g2, c);
-                g2.dispose();
-            }
-        });
-        
-        return btn;
-    }
+		inputArea = new JTextArea(3, 80);
+		inputArea.setFont(chatFont);
+		inputArea.setBackground(BG_INPUT);
+		inputArea.setForeground(TEXT_COLOR);
+		inputArea.setCaretColor(TEXT_COLOR);
+		inputArea.setLineWrap(true);
+		inputArea.setWrapStyleWord(true);
+		inputArea.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-    public void showWithPrefill(String selectedText, String sysPrompt, boolean autoSend) {
-        if (selectedText != null && !selectedText.isEmpty()) {
-            inputArea.setText(selectedText);
-            inputArea.setCaretPosition(0);
-            inputArea.requestFocusInWindow();
-        }
+		JScrollPane inputScroll = new JScrollPane(inputArea);
+		// Local RoundedBorder definition or import needed.
+		// For simplicity, let's define it locally or import it.
+		// Assuming com.tn3270.ui.RoundedBorder exists (we will create it).
+		inputScroll.setBorder(new com.tn3270.ui.RoundedBorder(12, new Color(200, 200, 200)));
+		inputScroll.setBackground(BG_MAIN);
+		inputScroll.getViewport().setBackground(BG_INPUT);
 
-        if (sysPrompt != null && !sysPrompt.isEmpty() && !sysPrompt.startsWith("You are")) {
-            chatView.addMessage("assistant", "[System Context]\n" + sysPrompt, inputArea.getFont(),
-                    new Color(100, 100, 100), new Color(255, 255, 220));
-        }
+		bottom.add(inputScroll, BorderLayout.CENTER);
 
-        setLocationRelativeTo(owner);
-        setVisible(true);
+		JLabel hint = new JLabel("Enter to send, Shift+Enter for newline");
+		hint.setForeground(Color.GRAY);
+		hint.setFont(new Font("SansSerif", Font.PLAIN, 10));
+		hint.setHorizontalAlignment(SwingConstants.RIGHT);
+		bottom.add(hint, BorderLayout.SOUTH);
 
-        if (autoSend && selectedText != null && !selectedText.trim().isEmpty()) {
-            SwingUtilities.invokeLater(this::doSend);
-        }
-    }
+		add(bottom, BorderLayout.SOUTH);
 
-    private void doSend() {
-        String prompt = inputArea.getText().trim();
-        if (prompt.isEmpty()) return;
+		sendBtn.addActionListener(e -> doSend());
+		tryNextBtn.addActionListener(e -> doTryNext());
 
-        String model = modelChoice.getSelectedItem();
-        lastPrompt = prompt;
+		attachBtn.addActionListener(e -> doAttachHostFile());
+		saveHostBtn.addActionListener(e -> doSaveToHost());
 
-        chatView.addMessage("user", prompt, inputArea.getFont(), Color.WHITE, new Color(0, 120, 215));
+		prefsBtn.addActionListener(e -> new AIPreferencesPanel(owner, config).showDialog());
 
-        inputArea.setText("");
-        spinner.setText("Sending to " + model + "...");
+		inputArea.addKeyListener(new KeyAdapter() {
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ENTER && !e.isShiftDown()) {
+					e.consume();
+					doSend();
+				}
+			}
+		});
 
-        String sys = config.get("ai.prompt.default", "You are assisting a TN3270 mainframe user.");
+		JPopupMenu popup = new JPopupMenu();
+		JMenuItem cut = new JMenuItem("Cut");
+		cut.addActionListener(e -> inputArea.cut());
+		JMenuItem copy = new JMenuItem("Copy");
+		copy.addActionListener(e -> inputArea.copy());
+		JMenuItem paste = new JMenuItem("Paste");
+		paste.addActionListener(e -> inputArea.paste());
+		popup.add(cut);
+		popup.add(copy);
+		popup.add(paste);
+		inputArea.setComponentPopupMenu(popup);
+	}
 
-        streamingClient.sendStream(model, prompt, sys, chunk -> {
-            EventQueue.invokeLater(() -> {
-                Component[] comps = chatView.listPanel.getComponents();
-                AIMessageBubble lastBubble = null;
+	private JButton createColorButton(String text, Color baseColor, Color textColor) {
+		JButton btn = new JButton(text);
+		btn.setBackground(baseColor);
+		btn.setForeground(textColor);
+		btn.setFocusPainted(false);
+		btn.setFont(new Font("SansSerif", Font.BOLD, 11));
 
-                for (int i = comps.length - 1; i >= 0; i--) {
-                    if (comps[i] instanceof AIMessageBubble) {
-                        lastBubble = (AIMessageBubble) comps[i];
-                        break;
-                    }
-                }
+		btn.setBorder(new javax.swing.border.CompoundBorder(new com.tn3270.ui.RoundedBorder(10, baseColor.darker()),
+				new javax.swing.border.EmptyBorder(4, 12, 4, 12)));
 
-                if (lastBubble != null && "assistant".equals(lastBubble.who)) {
-                    lastBubble.appendText(chunk);
-                } else {
-                    chatView.addMessage("assistant", chunk, inputArea.getFont(), Color.BLACK, new Color(240, 242, 245));
-                }
-            });
-        }, ex -> EventQueue.invokeLater(() -> {
-            chatView.addMessage("assistant", "[Error] " + ex.getMessage(), inputArea.getFont(),
-                    new Color(180, 0, 0), new Color(255, 235, 235));
-            spinner.setText("Error");
-        }), () -> EventQueue.invokeLater(() -> spinner.setText("Idle")));
-    }
+		btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+		btn.setContentAreaFilled(false);
+		btn.setOpaque(false);
 
-    private void doTryNext() {
-        if (lastPrompt == null) return;
-        int idx = modelChoice.getSelectedIndex();
-        if (idx < 0) return;
-        int next = (idx + 1) % modelChoice.getItemCount();
-        modelChoice.select(next);
-        inputArea.setText(lastPrompt);
-        doSend();
-    }
-    
- // =======================================================================
-    // LOGIC: DOWNLOAD FROM MAINFRAME -> AI PROMPT
-    // =======================================================================
-    private void doAttachHostFile() {
-        if (emulator == null) return;
-        com.tn3270.TN3270Session session = emulator.getCurrentSession();
-        
-        if (session == null || !session.isConnected()) {
-            JOptionPane.showMessageDialog(this, "No active session connected.");
-            return;
-        }
+		btn.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
+			@Override
+			public void paint(Graphics g, JComponent c) {
+				AbstractButton b = (AbstractButton) c;
+				ButtonModel model = b.getModel();
+				Graphics2D g2 = (Graphics2D) g.create();
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        String dataset = JOptionPane.showInputDialog(this, "Enter Host Dataset (e.g. USER.SOURCE(MAIN) or PROFILE EXEC A):");
-        if (dataset == null || dataset.trim().isEmpty()) return;
+				Color fill = baseColor;
+				if (model.isPressed())
+					fill = baseColor.darker();
+				else if (model.isRollover())
+					fill = baseColor.brighter();
 
-        // Use the AIManager singleton for helpers
-        AIManager aiMgr = AIManager.getInstance();
+				g2.setColor(fill);
+				g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 10, 10);
 
-        com.tn3270.TN3270Session.MemoryTransferCallback callback = new com.tn3270.TN3270Session.MemoryTransferCallback() {
-            @Override
-            public void onDownloadComplete(byte[] content) {
-                // 1. Check for Binary Garbage
-                if (AIManager.isLikelyBinary(content)) {
-                    int confirm = JOptionPane.showConfirmDialog(AIChatWindow.this, 
-                        "The file '" + dataset + "' appears to be binary.\nAttach anyway?", 
-                        "Binary Warning", JOptionPane.YES_NO_OPTION);
-                    if (confirm != JOptionPane.YES_OPTION) return;
-                }
+				super.paint(g2, c);
+				g2.dispose();
+			}
+		});
 
-                // 2. Convert to String for AI (Assume UTF-8/Text)
-                String textContent = new String(content, StandardCharsets.UTF_8);
+		return btn;
+	}
 
-                // 3. Augment Prompt with Context (RAG)
-                // Note: We default to TSO for now, or you can try to detect from session
-                String augmented = aiMgr.buildAugmentedPrompt(dataset, textContent, "TSO");
+	public void showWithPrefill(String selectedText, String sysPrompt, boolean autoSend) {
+		if (selectedText != null && !selectedText.isEmpty()) {
+			inputArea.setText(selectedText);
+			inputArea.setCaretPosition(0);
+			inputArea.requestFocusInWindow();
+		}
 
-                SwingUtilities.invokeLater(() -> {
-                    // Append to input area so the user can see/edit it before sending
-                    inputArea.append("\n" + augmented);
-                    // Also scroll to bottom
-                    inputArea.setCaretPosition(inputArea.getDocument().getLength());
-                    JOptionPane.showMessageDialog(AIChatWindow.this, "File attached successfully.");
-                });
-            }
+		if (sysPrompt != null && !sysPrompt.isEmpty() && !sysPrompt.startsWith("You are")) {
+			chatView.addMessage("assistant", "[System Context]\n" + sysPrompt, inputArea.getFont(),
+					new Color(100, 100, 100), new Color(255, 255, 220));
+		}
 
-            @Override
-            public void onUploadComplete() { }
+		setLocationRelativeTo(owner);
+		setVisible(true);
 
-            @Override
-            public void onError(String message) {
-                JOptionPane.showMessageDialog(AIChatWindow.this, "Download Error: " + message);
-            }
-        };
+		if (autoSend && selectedText != null && !selectedText.trim().isEmpty()) {
+			SwingUtilities.invokeLater(this::doSend);
+		}
+	}
 
-        // Trigger Session Logic
-        session.downloadTextFromHost(dataset, session.getHostType(), callback);
-    }
+	private void doSend() {
+		String prompt = inputArea.getText().trim();
+		if (prompt.isEmpty())
+			return;
 
-    // =======================================================================
-    // LOGIC: UPLOAD AI RESPONSE -> MAINFRAME
-    // =======================================================================
-    private void doSaveToHost() {
-        // 1. Try Input Area Selection
-        String text = inputArea.getSelectedText();
-        
-        // 2. Fallback to Clipboard
-        if (text == null) {
-            try {
-                text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
-            } catch(Exception e) {}
-        }
+		String model = modelChoice.getSelectedItem();
+		lastPrompt = prompt;
 
-        if (text == null || text.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "To save manually, select text in the Input Area or copy text to the Clipboard.");
-            return;
-        }
-        
-        saveTextToHost(text);
-    }
-    
-    /**
-     * Public method to upload specific text to the host.
-     * Can be called by Toolbar Buttons OR Chat Bubbles.
-     */
-    public void saveTextToHost(String textContent) {
-        if (emulator == null) return;
-        com.tn3270.TN3270Session session = emulator.getCurrentSession();
-        
-        if (session == null || !session.isConnected()) {
-            JOptionPane.showMessageDialog(this, "No active session connected.");
-            return;
-        }
+		chatView.addMessage("user", prompt, inputArea.getFont(), Color.WHITE, new Color(0, 120, 215));
 
-        if (textContent == null || textContent.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No text provided to save.");
-            return;
-        }
+		inputArea.setText("");
+		spinner.setText("Sending to " + model + "...");
 
-        // Auto-detect host type based on dataset name, so we just ask for the name.
-        String dataset = JOptionPane.showInputDialog(this, "Save content to Host Dataset:");
-        if (dataset == null || dataset.trim().isEmpty()) return;
+		String sys = config.get("ai.prompt.default", "You are assisting a TN3270 mainframe user.");
 
-        // Perform the upload
-        session.uploadTextToHost(textContent, dataset, null, new com.tn3270.TN3270Session.MemoryTransferCallback() {
-            @Override
-            public void onUploadComplete() {
-                JOptionPane.showMessageDialog(AIChatWindow.this, "Successfully saved to " + dataset);
-            }
-            @Override
-            public void onDownloadComplete(byte[] c) {} // FIXED SIGNATURE
-            @Override
-            public void onError(String msg) {
-                JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);
-            }
-        });
-    }
+		streamingClient.sendStream(model, prompt, sys, chunk -> {
+			EventQueue.invokeLater(() -> {
+				Component[] comps = chatView.listPanel.getComponents();
+				AIMessageBubble lastBubble = null;
+
+				for (int i = comps.length - 1; i >= 0; i--) {
+					if (comps[i] instanceof AIMessageBubble) {
+						lastBubble = (AIMessageBubble) comps[i];
+						break;
+					}
+				}
+
+				if (lastBubble != null && "assistant".equals(lastBubble.who)) {
+					lastBubble.appendText(chunk);
+				} else {
+					chatView.addMessage("assistant", chunk, inputArea.getFont(), Color.BLACK, new Color(240, 242, 245));
+				}
+			});
+		}, ex -> EventQueue.invokeLater(() -> {
+			chatView.addMessage("assistant", "[Error] " + ex.getMessage(), inputArea.getFont(), new Color(180, 0, 0),
+					new Color(255, 235, 235));
+			spinner.setText("Error");
+		}), () -> EventQueue.invokeLater(() -> spinner.setText("Idle")));
+	}
+
+	private void doTryNext() {
+		if (lastPrompt == null)
+			return;
+		int idx = modelChoice.getSelectedIndex();
+		if (idx < 0)
+			return;
+		int next = (idx + 1) % modelChoice.getItemCount();
+		modelChoice.select(next);
+		inputArea.setText(lastPrompt);
+		doSend();
+	}
+
+	// =======================================================================
+	// LOGIC: DOWNLOAD FROM MAINFRAME -> AI PROMPT
+	// =======================================================================
+	private void doAttachHostFile() {
+		if (emulator == null)
+			return;
+		com.tn3270.TN3270Session session = emulator.getCurrentSession();
+
+		if (session == null || !session.isConnected()) {
+			JOptionPane.showMessageDialog(this, "No active session connected.");
+			return;
+		}
+
+		String dataset = JOptionPane.showInputDialog(this,
+				"Enter Host Dataset (e.g. USER.SOURCE(MAIN) or PROFILE EXEC A):");
+		if (dataset == null || dataset.trim().isEmpty())
+			return;
+
+		// Use the AIManager singleton for helpers
+		AIManager aiMgr = AIManager.getInstance();
+
+		com.tn3270.TN3270Session.MemoryTransferCallback callback = new com.tn3270.TN3270Session.MemoryTransferCallback() {
+			@Override
+			public void onDownloadComplete(byte[] content) {
+				SwingUtilities.invokeLater(() -> {
+					// 1. Check for Binary Garbage
+					if (AIManager.isLikelyBinary(content)) {
+						int confirm = JOptionPane.showConfirmDialog(AIChatWindow.this,
+								"The file '" + dataset + "' appears to be binary.\nAttach anyway?", "Binary Warning",
+								JOptionPane.YES_NO_OPTION);
+						if (confirm != JOptionPane.YES_OPTION)
+							return;
+					}
+
+					// 2. Convert to String for AI (Assume UTF-8/Text)
+					String textContent = new String(content, StandardCharsets.UTF_8);
+
+					// 3. Augment Prompt with Context (RAG)
+					// Note: We default to TSO for now, or you can try to detect from session
+					String augmented = aiMgr.buildAugmentedPrompt(dataset, textContent, "TSO");
+
+					// Append to input area so the user can see/edit it before sending
+					inputArea.append("\n" + augmented);
+					// Also scroll to bottom
+					inputArea.setCaretPosition(inputArea.getDocument().getLength());
+					JOptionPane.showMessageDialog(AIChatWindow.this, "File attached successfully.");
+				});
+			}
+
+			@Override
+			public void onUploadComplete() {
+			}
+
+			@Override
+			public void onError(String message) {
+				JOptionPane.showMessageDialog(AIChatWindow.this, "Download Error: " + message);
+			}
+		};
+
+		// Trigger Session Logic
+		session.downloadTextFromHost(dataset, session.getHostType(), callback);
+	}
+
+	// =======================================================================
+	// LOGIC: UPLOAD AI RESPONSE -> MAINFRAME
+	// =======================================================================
+	private void doSaveToHost() {
+		// 1. Try Input Area Selection
+		String text = inputArea.getSelectedText();
+
+		// 2. Fallback to Clipboard
+		if (text == null) {
+			try {
+				text = (String) Toolkit.getDefaultToolkit().getSystemClipboard()
+						.getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+			} catch (Exception e) {
+			}
+		}
+
+		if (text == null || text.trim().isEmpty()) {
+			JOptionPane.showMessageDialog(this,
+					"To save manually, select text in the Input Area or copy text to the Clipboard.");
+			return;
+		}
+
+		saveTextToHost(text);
+	}
+
+	/**
+	 * Public method to upload specific text to the host. Can be called by Toolbar
+	 * Buttons OR Chat Bubbles.
+	 */
+	public void saveTextToHost(String textContent) {
+		if (emulator == null)
+			return;
+		com.tn3270.TN3270Session session = emulator.getCurrentSession();
+
+		if (session == null || !session.isConnected()) {
+			JOptionPane.showMessageDialog(this, "No active session connected.");
+			return;
+		}
+
+		if (textContent == null || textContent.trim().isEmpty()) {
+			JOptionPane.showMessageDialog(this, "No text provided to save.");
+			return;
+		}
+
+		// Auto-detect host type based on dataset name, so we just ask for the name.
+		String dataset = JOptionPane.showInputDialog(this, "Save content to Host Dataset:");
+		if (dataset == null || dataset.trim().isEmpty())
+			return;
+
+		// Perform the upload
+		session.uploadTextToHost(textContent, dataset, null, new com.tn3270.TN3270Session.MemoryTransferCallback() {
+			@Override
+			public void onUploadComplete() {
+				SwingUtilities.invokeLater(() -> {
+					JOptionPane.showMessageDialog(AIChatWindow.this, "Successfully saved to " + dataset);
+				});
+			}
+
+			@Override
+			public void onDownloadComplete(byte[] c) {
+			} // FIXED SIGNATURE
+
+			@Override
+			public void onError(String msg) {
+				SwingUtilities.invokeLater(() -> {
+					JOptionPane.showMessageDialog(AIChatWindow.this, "Upload Error: " + msg);
+				});
+			}
+		});
+	}
 }
