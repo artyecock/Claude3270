@@ -32,5 +32,5 @@ morphed into content suitable for a VM Workshop presentation.
 
 I hope that you find this project amusing and useful.
 
-Arty Ecock
+Arty Ecock -
 November, 2025
