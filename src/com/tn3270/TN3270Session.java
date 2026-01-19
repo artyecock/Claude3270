@@ -6,6 +6,10 @@ import static com.tn3270.constants.ProtocolConstants.AID_PA1;
 import static com.tn3270.constants.ProtocolConstants.AID_PA2;
 import static com.tn3270.constants.ProtocolConstants.AID_PA3;
 import static com.tn3270.constants.ProtocolConstants.AID_PF1;
+import static com.tn3270.constants.ProtocolConstants.AID_PF9;
+import static com.tn3270.constants.ProtocolConstants.AID_PF10;
+import static com.tn3270.constants.ProtocolConstants.AID_PF12;
+import static com.tn3270.constants.ProtocolConstants.AID_PF13;
 import static com.tn3270.constants.ProtocolConstants.AID_PF24;
 import static com.tn3270.constants.ProtocolConstants.AID_STRUCTURED_FIELD;
 import static com.tn3270.constants.ProtocolConstants.ATTR_CHAR_SET;
@@ -1189,7 +1193,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 						int t = data[i++] & 0xFF;
 						int v = data[i++] & 0xFF;
 
-						if (t == ATTR_FIELD || t == 0xC0)
+						//if (t == ATTR_FIELD || t == 0xC0)
+						if (t == ATTR_FIELD)
 							a = (byte) v;
 						else if (t == ATTR_FOREGROUND)
 							col = normalizeColor((byte) v);
@@ -1204,15 +1209,28 @@ public class TN3270Session extends JPanel implements KeyListener {
 					screenModel.setExtendedColor(p, col);
 					screenModel.setHighlight(p, hl);
 					screenModel.setCharset(p, cs);
-
+					/*
+					if (p == 562 || p == 642 || p == 722 || p == 882 || p == 561 || p == 641 || p == 721 || p == 881) {
+					    System.out.println(String.format("SFE at p=%d: col=%d hl=%d cs=%d", p, col, hl, cs));
+					}
+					*/
+					// DO NOT propagate SFE attributes to subsequent text!
+					// The field attribute itself has the color, but characters after it
+					// start with currentColor=0 and get their colors from SA orders.
+					// REMOVED lines that were propagating col/hl/cs to currentColor/etc.
+					// This was causing the first character after a field to inherit the
+					// field color instead of waiting for its own SA color order.
+					
 					// Propagate SFE attributes to subsequent text
+					/* Nope, don't do this:
 					if (col != 0)
 						screenModel.setCurrentColor(col);
 					if (hl != 0)
 						screenModel.setCurrentHighlight(hl);
 					if (cs != 0)
-						screenModel.setCurrentCharset(cs);
-
+					    screenModel.setCurrentCharset(cs);
+                    */
+					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (SFE) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 					p = (p + 1) % bufLen;
 				}
 			} else if (b == ORDER_SBA) {
@@ -1254,6 +1272,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 						screenModel.setExtendedColor(p, screenModel.getCurrentColor());
 						screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 						screenModel.setCharset(p, screenModel.getCurrentCharset());
+						//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (RA) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 						p = (p + 1) % bufLen;
 					}
 				}
@@ -1287,23 +1306,26 @@ public class TN3270Session extends JPanel implements KeyListener {
 							p = (p + 1) % bufLen;
 						}
 					}
+					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (EUA) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 				}
 			} else if (b == ORDER_SA) {
-				if (i + 1 < data.length) {
+				if (i + 2 < data.length) {
 					int t = data[i++] & 0xFF;
 					byte v = data[i++];
 
-					if (t == ATTR_FOREGROUND)
+					if (t == ATTR_FOREGROUND) 
 						screenModel.setCurrentColor(normalizeColor(v));
 					else if (t == ATTR_HIGHLIGHTING)
 						screenModel.setCurrentHighlight(v);
 					else if (t == ATTR_CHAR_SET)
-						screenModel.setCurrentCharset(v); // Handle SA Type 0x43
-					else if (t == 0x00) {
-						// Reset All
-						screenModel.setCurrentColor((byte) 0);
-						screenModel.setCurrentHighlight((byte) 0);
-						screenModel.setCurrentCharset((byte) 0);
+						screenModel.setCurrentCharset(v); 
+					else if (t == ATTR_FIELD) {
+						   if (v == 0x00) {
+							   // Reset all
+							   screenModel.setCurrentColor((byte) 0);
+							   screenModel.setCurrentHighlight((byte) 0);
+							   screenModel.setCurrentCharset((byte) 0);
+						   }
 					}
 				}
 			} else if (b == ORDER_GE) {
@@ -1332,6 +1354,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 					// so it's difficult to force them to display "taller" than usual. For
 					// now, we just let them be.
 					//
+					
+					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (GE) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 
 					p = (p + 1) % bufLen;
 				}
@@ -1360,9 +1384,17 @@ public class TN3270Session extends JPanel implements KeyListener {
 				screenModel.setExtendedColor(p, screenModel.getCurrentColor());
 				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 				screenModel.setCharset(p, currentCS);
-
+				/*
+				if (p == 562 || p == 642 || p == 722 || p == 882) {
+				    System.out.println(String.format("Writing char 0x%02X at p=%d with currentColor=%d", 
+				        b & 0xFF, p, screenModel.getCurrentColor()));
+				}
+*/
+				//if (p > 550 && p < 570) System.out.println(String.format("TN3270: ('%c') Stored extColor at p=%d: %d", c, p, screenModel.getExtendedColor(p) & 0xFF));
+				
 				p = (p + 1) % bufLen;
 			}
+			//System.out.println(String.format("TN3270: Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 		}
 	}
 
@@ -1523,24 +1555,37 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	public void sendAID(int aid) {
-		lastAID = aid;
+	    // FIX: Normalize to unsigned 0-255 to handle signed byte promotion
+	    // 0xF8 as a byte is -8. We need it to be 248 to match the constants.
+	    int cleanAid = aid & 0xFF; 
+	    
+	    lastAID = cleanAid; // Update lastAID with clean value too
+		
 		int cPos = screenModel.getCursorPos();
 		keyboardLocked = true;
 		updateStatusBar();
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			baos.write((byte) aid);
+			baos.write((byte) cleanAid);
 			baos.write(encode3270Address(cPos)[0]);
 			baos.write(encode3270Address(cPos)[1]);
 
-			if (aid == AID_CLEAR)
+			if (cleanAid == AID_CLEAR)
 				resetReplyModeToDefault();
 
-			boolean isReadMod = (aid == AID_ENTER || (aid >= AID_PF1 && aid <= AID_PF24) || aid == AID_PA1
-					|| aid == AID_PA2 || aid == AID_PA3 || aid == AID_CLEAR);
-
+	        // 2. CRITICAL FIX: Handle Non-Contiguous AID Ranges
+	        // PF1-PF9 are 0xF1-0xF9 (241-249)
+	        // PF10-PF12 are 0x7A-0x7C (122-124)
+	        boolean isPF1_9   = (cleanAid >= AID_PF1 && cleanAid <= AID_PF9); 
+	        boolean isPF10_12 = (cleanAid >= AID_PF10 && cleanAid <= AID_PF12);
+	        boolean isPF13_24 = (cleanAid >= (AID_PF13 & 0xFF) && cleanAid <= (AID_PF24 & 0xFF));
+		    
+		    boolean isReadMod = (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24 || 
+		                         cleanAid == AID_PA1 || cleanAid == AID_PA2 || cleanAid == AID_PA3 || 
+		                         cleanAid == AID_CLEAR);
+		    
 			if (isReadMod) {
-				if (aid == AID_ENTER || (aid >= AID_PF1 && aid <= AID_PF24)) {
+				if (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24) {
 					int screenSize = screenModel.getSize();
 
 					// --- FIX: Detect Formatted vs Unformatted Screen ---
@@ -1560,9 +1605,10 @@ public class TN3270Session extends JPanel implements KeyListener {
 							if (screenModel.isFieldStart(i) && (screenModel.getAttr(i) & 0x01) != 0) {
 								int fieldStart = i;
 								int end = screenModel.findNextField(i);
-
+								
 								// Find data bounds
 								int dataStart = fieldStart + 1;
+
 								while (dataStart < end && screenModel.getChar(dataStart) == '\0')
 									dataStart++;
 								int dataEnd = end - 1;

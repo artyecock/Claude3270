@@ -83,9 +83,6 @@ public class ScreenModel {
 		// NOT the physical buffer size (which is padded to 4000)
 		return rows * cols;
 	}
-	//public int getSize() {
-	//	return buffer.length;
-	//}
 
 	public char getChar(int i) {
 		return (i >= 0 && i < buffer.length) ? buffer[i] : '\0';
@@ -108,6 +105,10 @@ public class ScreenModel {
 	public void setExtendedColor(int i, byte b) {
 		if (i >= 0 && i < extendedColors.length)
 			extendedColors[i] = b;
+	}
+	
+	public byte getExtendedColor(int i) {
+		return (i >= 0 && i < extendedColors.length) ? extendedColors[i] : 0;
 	}
 
 	public void setHighlight(int i, byte b) {
@@ -232,6 +233,35 @@ public class ScreenModel {
 	}
 
 	public int findFieldStart(int pos) {
+	    // FIX: Use the Logical Screen Size, not the physical Array Size.
+	    int size = getSize(); 
+	    
+	    // Safety check
+	    if (size <= 0) return -1;
+
+	    // Scan backward up to 'size' times to prevent infinite loops
+	    for (int i = 0; i < size; i++) {
+	        // Calculate backward position
+	        int p = pos - i;
+	        
+	        // Handle wrap-around manually for the Logical Screen Size
+	        // (Java's % operator behaves differently for negatives than strictly math-based mod)
+	        if (p < 0) {
+	            p += size;
+	        }
+	        
+	        // Check if an attribute exists at this position
+	        // attributes array might be larger than size, but p is now constrained to 0..size-1
+	        if (attributes[p] != 0) {
+	            return p;
+	        }
+	    }
+	    
+	    // No fields found (Unformatted Screen)
+	    return -1;
+	}
+	
+	public int findFieldStartOld(int pos) {
 		for (int i = 0; i < buffer.length; i++) {
 			int p = (pos - i + buffer.length) % buffer.length;
 			if (attributes[p] != 0)
@@ -239,8 +269,25 @@ public class ScreenModel {
 		}
 		return -1;
 	}
-
+	
 	public int findNextField(int pos) {
+	    // FIX: Use Logical Screen Size (e.g. 1920), NOT buffer.length (4000)
+	    int size = getSize(); 
+	    
+	    if (size <= 0) return 0;
+
+	    int p = (pos + 1) % size;
+	    int count = 0;
+	    
+	    // Scan forward using the logical size limits
+	    while (!isFieldStart(p) && count < size) {
+	        p = (p + 1) % size;
+	        count++;
+	    }
+	    return p;
+	}
+
+	public int findNextFieldOld(int pos) {
 		int p = (pos + 1) % buffer.length;
 		int count = 0;
 		while (!isFieldStart(p) && count < buffer.length) {
@@ -288,7 +335,6 @@ public class ScreenModel {
 		return currentHighlight;
 	}
 
-	// NEW: Context state for Charset
 	public void setCurrentCharset(byte c) {
 		this.currentCharset = c;
 	}
