@@ -1040,7 +1040,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
 					            if (fieldColor == 1 && prot && numeric && isVerticalBar) {
 					            //if (fieldColor == 1 && prot && numeric && high) {
 					                fg = palette[6]; // Force Yellow
-					                System.out.println(String.format("Forcing char '%c' at pos=%d num=%s prot=%s high=%s", c, pos, numeric, prot, high));
+					                //System.out.println(String.format("Forcing char '%c' at pos=%d num=%s prot=%s high=%s", c, pos, numeric, prot, high));
 					            } else {
 					                fg = palette[fieldColor];
 					            }
