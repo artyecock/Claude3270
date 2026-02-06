@@ -14,6 +14,10 @@ public class StatusBar extends JPanel {
 	private JLabel ipLabel;
 	private JLabel positionLabel;
 
+	// Scroll-back mode indicator
+	private boolean scrollMode = false;
+	private JLabel scrollModeLabel;
+
 	public StatusBar() {
 		setLayout(new BorderLayout());
 		setBackground(Color.DARK_GRAY);
@@ -42,6 +46,78 @@ public class StatusBar extends JPanel {
 		rightPanel.add(positionLabel);
 
 		add(rightPanel, BorderLayout.EAST);
+
+		// Create scroll mode indicator label
+		scrollModeLabel = new JLabel();
+		scrollModeLabel.setForeground(Color.RED);
+		scrollModeLabel.setFont(getFont().deriveFont(Font.BOLD));
+		scrollModeLabel.setVisible(false); // Hidden by default
+		/*
+		 * scrollModeLabel.setText(" SCROLL-BACK MODE ");
+		 * scrollModeLabel.setForeground(Color.WHITE);
+		 * scrollModeLabel.setBackground(Color.RED); scrollModeLabel.setOpaque(true);
+		 * scrollModeLabel.setFont(getFont().deriveFont(Font.BOLD));
+		 * scrollModeLabel.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+		 */
+		scrollModeLabel.setText("◄◄ SCROLL-BACK ►►");
+		scrollModeLabel.setForeground(new Color(255, 100, 100)); // Lighter red
+		scrollModeLabel.setFont(getFont().deriveFont(Font.BOLD, 12f));
+
+		// Add to status bar layout
+		// Position depends on your existing layout - add it in a visible location
+		// Example: if using BoxLayout or FlowLayout
+		// add(Box.createHorizontalStrut(10)); // Add some spacing
+		add(scrollModeLabel);
+	}
+
+	/**
+	 * Set scroll-back mode with page information.
+	 * 
+	 * @param scrollMode  true if in scroll-back mode
+	 * @param currentPage current page index (0-based)
+	 * @param totalPages  total number of pages available
+	 */
+	public void setScrollMode(boolean scrollMode, int currentPage, int totalPages) {
+		this.scrollMode = scrollMode;
+
+		if (scrollMode) {
+			String pageInfo = String.format("◄ SCROLL-BACK: Page %d of %d ►", currentPage, totalPages);
+			scrollModeLabel.setText(pageInfo);
+			scrollModeLabel.setVisible(true);
+		} else {
+			scrollModeLabel.setVisible(false);
+		}
+
+		revalidate();
+		repaint();
+	}
+
+	// Keep the simple version as well for backward compatibility
+	public void setScrollMode(boolean scrollMode) {
+		setScrollMode(scrollMode, 0, 0);
+	}
+
+	/**
+	 * Set scroll-back mode state and update the indicator.
+	 * 
+	 * @param scrollMode true if in scroll-back mode, false if in live mode
+	 */
+	/*
+	 * public void setScrollMode(boolean scrollMode) { this.scrollMode = scrollMode;
+	 * 
+	 * if (scrollMode) { scrollModeLabel.setText("◄◄ SCROLL-BACK MODE ►►");
+	 * scrollModeLabel.setVisible(true); } else { scrollModeLabel.setVisible(false);
+	 * }
+	 * 
+	 * // Force repaint to update display revalidate(); repaint(); }
+	 */
+	/**
+	 * Check if currently in scroll-back mode.
+	 * 
+	 * @return true if in scroll-back mode
+	 */
+	public boolean isScrollMode() {
+		return scrollMode;
 	}
 
 	public void setStatus(String status) {

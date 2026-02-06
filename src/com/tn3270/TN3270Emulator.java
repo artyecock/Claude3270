@@ -1017,7 +1017,351 @@ public class TN3270Emulator extends JFrame {
 		termSetItem.addActionListener(e -> showTerminalSettingsDialog());
 		settingsMenu.add(termSetItem);
 		menuBar.add(settingsMenu);
+		// --- DEBUG ---
+		JMenu debugMenu = new JMenu("Debug");
 
+		// Enable/Disable Debug Mode
+		JCheckBoxMenuItem debugModeItem = new JCheckBoxMenuItem("Enable Debug Mode");
+		debugModeItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        // Use the new helper method that manages both debug mode and border visibility
+		        session.setDebugModeEnabled(debugModeItem.isSelected());
+		        
+		        // Show feedback to user
+		        if (debugModeItem.isSelected()) {
+		            JOptionPane.showMessageDialog(
+		                this,
+		                "Debug mode enabled.\n\n" +
+		                "Features:\n" +
+		                "• Data streams are now being captured\n" +
+		                "• Green border indicates debug mode is active\n" +
+		                "• Press F19 to scroll back through screens\n" +
+		                "• Press F20 to scroll forward\n" +
+		                "• Use arrow keys to inspect fields\n" +
+		                "• Border turns RED in scroll mode",
+		                "Debug Mode Enabled",
+		                JOptionPane.INFORMATION_MESSAGE
+		            );
+		        }
+		    }
+		});
+		debugMenu.add(debugModeItem);
+
+		debugMenu.addSeparator();
+
+		// Clear History
+		JMenuItem clearHistoryItem = new JMenuItem("Clear Debug History");
+		clearHistoryItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        int result = JOptionPane.showConfirmDialog(
+		            this,
+		            "Clear all captured data streams?",
+		            "Clear Debug History",
+		            JOptionPane.YES_NO_OPTION,
+		            JOptionPane.QUESTION_MESSAGE
+		        );
+		        if (result == JOptionPane.YES_OPTION) {
+		            session.getDataStreamDebugger().clearHistory();
+		            JOptionPane.showMessageDialog(
+		                this,
+		                "Debug history cleared.",
+		                "History Cleared",
+		                JOptionPane.INFORMATION_MESSAGE
+		            );
+		        }
+		    }
+		});
+		debugMenu.add(clearHistoryItem);
+
+		debugMenu.addSeparator();
+
+		// Export Debug Log
+		JMenuItem exportLogItem = new JMenuItem("Export Debug Log...");
+		exportLogItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, shortcutKey));
+		exportLogItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Export Debug Log");
+		        chooser.setSelectedFile(new java.io.File("tn3270_debug_" + 
+		            System.currentTimeMillis() + ".txt"));
+		        
+		        if (chooser.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().exportToText(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug log exported successfully to:\n" + 
+		                    chooser.getSelectedFile().getAbsolutePath(),
+		                    "Export Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error exporting debug log:\n" + ex.getMessage(),
+		                    "Export Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(exportLogItem);
+
+		// Copy Data Streams to Clipboard
+		JMenuItem copyClipboardItem = new JMenuItem("Copy Data Streams to Clipboard");
+		copyClipboardItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutKey | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+		copyClipboardItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        String text = session.getDataStreamDebugger().formatForClipboard();
+		        java.awt.datatransfer.StringSelection sel = new java.awt.datatransfer.StringSelection(text);
+		        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+		        
+		        // Count entries for feedback
+		        int count = session.getDataStreamDebugger().getHistory().size();
+		        JOptionPane.showMessageDialog(
+		            this,
+		            count + " data stream" + (count == 1 ? "" : "s") + " copied to clipboard.\n\n" +
+		            "Paste into a text editor or chat to review.",
+		            "Copied to Clipboard",
+		            JOptionPane.INFORMATION_MESSAGE
+		        );
+		    }
+		});
+		debugMenu.add(copyClipboardItem);
+
+		debugMenu.addSeparator();
+
+		// Save Session
+		JMenuItem saveSessionItem = new JMenuItem("Save Debug Session...");
+		saveSessionItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Save Debug Session");
+		        chooser.setSelectedFile(new java.io.File("session_" + 
+		            System.currentTimeMillis() + ".tn3270"));
+		        
+		        if (chooser.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().saveSession(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug session saved successfully to:\n" + 
+		                    chooser.getSelectedFile().getAbsolutePath(),
+		                    "Save Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error saving debug session:\n" + ex.getMessage(),
+		                    "Save Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(saveSessionItem);
+
+		// Load Session
+		JMenuItem loadSessionItem = new JMenuItem("Load Debug Session...");
+		loadSessionItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Load Debug Session");
+		        
+		        if (chooser.showOpenDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().loadSession(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug session loaded successfully.\n\n" +
+		                    "You can now use F7/F8 to scroll through the loaded screens.",
+		                    "Load Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException | ClassNotFoundException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error loading debug session:\n" + ex.getMessage(),
+		                    "Load Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(loadSessionItem);
+
+		menuBar.add(debugMenu);
+	/*	
+		// --- DEBUG ---
+		JMenu debugMenu = new JMenu("Debug");
+
+		// Enable/Disable Debug Mode
+		JCheckBoxMenuItem debugModeItem = new JCheckBoxMenuItem("Enable Debug Mode");
+		debugModeItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        session.getDataStreamDebugger().setDebugMode(debugModeItem.isSelected());
+		        
+		        // Show feedback to user
+		        if (debugModeItem.isSelected()) {
+		            JOptionPane.showMessageDialog(
+		                this,
+		                "Debug mode enabled.\n\n" +
+		                "Features:\n" +
+		                "• Data streams are now being captured\n" +
+		                "• Press F19 to scroll back through screens\n" +
+		                "• Press F20 to scroll forward\n" +
+		                "• Use arrow keys to inspect fields\n" +
+		                "• Border turns RED in scroll mode",
+		                "Debug Mode Enabled",
+		                JOptionPane.INFORMATION_MESSAGE
+		            );
+		        }
+		    }
+		});
+		debugMenu.add(debugModeItem);
+
+		debugMenu.addSeparator();
+
+		// Clear History
+		JMenuItem clearHistoryItem = new JMenuItem("Clear Debug History");
+		clearHistoryItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        int result = JOptionPane.showConfirmDialog(
+		            this,
+		            "Clear all captured data streams?",
+		            "Clear Debug History",
+		            JOptionPane.YES_NO_OPTION,
+		            JOptionPane.QUESTION_MESSAGE
+		        );
+		        if (result == JOptionPane.YES_OPTION) {
+		            session.getDataStreamDebugger().clearHistory();
+		            JOptionPane.showMessageDialog(
+		                this,
+		                "Debug history cleared.",
+		                "History Cleared",
+		                JOptionPane.INFORMATION_MESSAGE
+		            );
+		        }
+		    }
+		});
+		debugMenu.add(clearHistoryItem);
+
+		debugMenu.addSeparator();
+
+		// Export Debug Log
+		JMenuItem exportLogItem = new JMenuItem("Export Debug Log...");
+		exportLogItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, shortcutKey));
+		exportLogItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Export Debug Log");
+		        chooser.setSelectedFile(new java.io.File("tn3270_debug_" + 
+		            System.currentTimeMillis() + ".txt"));
+		        
+		        if (chooser.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().exportToText(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug log exported successfully to:\n" + 
+		                    chooser.getSelectedFile().getAbsolutePath(),
+		                    "Export Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error exporting debug log:\n" + ex.getMessage(),
+		                    "Export Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(exportLogItem);
+
+		debugMenu.addSeparator();
+
+		// Save Session
+		JMenuItem saveSessionItem = new JMenuItem("Save Debug Session...");
+		saveSessionItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Save Debug Session");
+		        chooser.setSelectedFile(new java.io.File("session_" + 
+		            System.currentTimeMillis() + ".tn3270"));
+		        
+		        if (chooser.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().saveSession(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug session saved successfully to:\n" + 
+		                    chooser.getSelectedFile().getAbsolutePath(),
+		                    "Save Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error saving debug session:\n" + ex.getMessage(),
+		                    "Save Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(saveSessionItem);
+
+		// Load Session
+		JMenuItem loadSessionItem = new JMenuItem("Load Debug Session...");
+		loadSessionItem.addActionListener(e -> {
+		    TN3270Session session = getCurrentSession();
+		    if (session != null) {
+		        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+		        chooser.setDialogTitle("Load Debug Session");
+		        
+		        if (chooser.showOpenDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+		            try {
+		                session.getDataStreamDebugger().loadSession(chooser.getSelectedFile());
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Debug session loaded successfully.\n\n" +
+		                    "You can now use F7/F8 to scroll through the loaded screens.",
+		                    "Load Complete",
+		                    JOptionPane.INFORMATION_MESSAGE
+		                );
+		            } catch (java.io.IOException | ClassNotFoundException ex) {
+		                JOptionPane.showMessageDialog(
+		                    this,
+		                    "Error loading debug session:\n" + ex.getMessage(),
+		                    "Load Error",
+		                    JOptionPane.ERROR_MESSAGE
+		                );
+		            }
+		        }
+		    }
+		});
+		debugMenu.add(loadSessionItem);
+
+		menuBar.add(debugMenu);
+*/
 		// --- HELP ---
 		JMenu helpMenu = new JMenu("Help");
 		JMenuItem aboutItem = new JMenuItem("About");

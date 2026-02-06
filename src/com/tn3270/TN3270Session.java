@@ -10,7 +10,10 @@ import static com.tn3270.constants.ProtocolConstants.AID_PF9;
 import static com.tn3270.constants.ProtocolConstants.AID_PF10;
 import static com.tn3270.constants.ProtocolConstants.AID_PF12;
 import static com.tn3270.constants.ProtocolConstants.AID_PF13;
+import static com.tn3270.constants.ProtocolConstants.AID_PF19;
+import static com.tn3270.constants.ProtocolConstants.AID_PF20;
 import static com.tn3270.constants.ProtocolConstants.AID_PF24;
+import static com.tn3270.constants.ProtocolConstants.PF_AID;
 import static com.tn3270.constants.ProtocolConstants.AID_STRUCTURED_FIELD;
 import static com.tn3270.constants.ProtocolConstants.ATTR_CHAR_SET;
 import static com.tn3270.constants.ProtocolConstants.ATTR_FIELD;
@@ -76,6 +79,8 @@ import static com.tn3270.util.EBCDIC.EBCDIC_TO_APL;
 import static com.tn3270.util.EBCDIC.EBCDIC_TO_ASCII;
 
 import com.tn3270.util.LoggerSetup;
+import com.tn3270.debug.DataStreamDebugger;
+import com.tn3270.debug.ScrollBackManager;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -288,21 +293,23 @@ public class TN3270Session extends JPanel implements KeyListener {
 						new Color[] { new Color(0, 43, 54), new Color(38, 139, 210), new Color(220, 50, 47),
 								new Color(211, 54, 130), new Color(133, 153, 0), new Color(42, 161, 152),
 								new Color(181, 137, 0), new Color(238, 232, 213) }));
-		
+
 		// 7. Modern Vibrant (Custom Palette for high visibility on Black)
-				// Includes "Easter Egg" Pink and "Sky" Blue
-				COLOR_SCHEMES.put("Modern Vibrant",
-						new ColorScheme(Color.BLACK, new Color(100, 230, 120), Color.WHITE, // BG, Default FG (Green), Cursor
-								new Color[] { 
-										Color.BLACK,             // 0: N/A
-										new Color(50, 150, 255), // 1: Blue (Sky Blue)
-										new Color(255, 100, 100),// 2: Red (Soft Salmon)
-										new Color(255, 150, 210),// 3: Pink (Easter Egg / Carnation)
-										new Color(100, 230, 120),// 4: Green (Spring Green)
-										new Color(80, 220, 255), // 5: Turquoise (Soft Cyan)
-										new Color(255, 235, 120),// 6: Yellow (Soft Gold)
-										Color.WHITE              // 7: White
-								}));
+		// Includes "Easter Egg" Pink and "Sky" Blue
+		COLOR_SCHEMES.put("Modern Vibrant", new ColorScheme(Color.BLACK, new Color(100, 230, 120), Color.WHITE, // BG,
+																												// Default
+																												// FG
+																												// (Green),
+																												// Cursor
+				new Color[] { Color.BLACK, // 0: N/A
+						new Color(50, 150, 255), // 1: Blue (Sky Blue)
+						new Color(255, 100, 100), // 2: Red (Soft Salmon)
+						new Color(255, 150, 210), // 3: Pink (Easter Egg / Carnation)
+						new Color(100, 230, 120), // 4: Green (Spring Green)
+						new Color(80, 220, 255), // 5: Turquoise (Soft Cyan)
+						new Color(255, 235, 120), // 6: Yellow (Soft Gold)
+						Color.WHITE // 7: White
+				}));
 
 		// NEW: Load custom user schemes from disk
 		loadCustomSchemes();
@@ -385,6 +392,10 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private boolean enableSound = true;
 	private boolean autoAdvance = true;
 
+	private DataStreamDebugger dataStreamDebugger;
+	private ScrollBackManager scrollBackManager;
+	private boolean scrollMode = false;
+
 	private boolean isProgrammaticResize = false;
 
 	public enum CursorStyle {
@@ -407,6 +418,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private Map<Integer, KeyMapping> keyMap = new HashMap<>();
 	private Map<Character, Character> inputCharMap = new HashMap<>();
 	private static final String KEYMAP_FILE = System.getProperty("user.home") + File.separator + ".tn3270keymap";
+
+	// Scroll-back key configuration — stored as 3270 AID values, NOT KeyEvent
+	// codes.
+	// Defaults: PF19 (0xC7) and PF20 (0xC8) — rarely used by host applications.
+	private int scrollBackAid = AID_PF19; // 0xC7
+	private int scrollForwardAid = AID_PF20; // 0xC8
 
 	public static class KeyMapping implements Serializable {
 		private static final long serialVersionUID = 1L;
@@ -435,6 +452,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 		this.modelName = (modelName != null && !modelName.trim().isEmpty()) ? modelName.trim() : "3278-2";
 		this.screenModel = new ScreenModel(this.modelName, MODELS);
 		this.terminalPanel = new TerminalPanel(screenModel);
+		this.dataStreamDebugger = new DataStreamDebugger();
+		this.scrollBackManager = new ScrollBackManager(this, dataStreamDebugger);
 
 		// FIX: ScrollPane is now a class field so applyColorScheme can access it
 		scrollPane = new JScrollPane(terminalPanel);
@@ -631,6 +650,98 @@ public class TN3270Session extends JPanel implements KeyListener {
 		return inputCharMap;
 	}
 
+	public void setDebugModeEnabled(boolean enabled) {
+	    dataStreamDebugger.setDebugMode(enabled);
+	    terminalPanel.setShowBorder(enabled);  // Show/hide border
+	    
+	    // Exit scroll mode if disabling debug
+	    if (!enabled && scrollBackManager.isScrollMode()) {
+	        scrollBackManager.forceExit();
+	    }
+	}
+	
+	/**
+	 * Set scroll-back mode state.
+	 * 
+	 * @param scrollMode true to enter scroll mode, false to exit
+	 */
+	public void setScrollMode(boolean scrollMode) {
+		this.scrollMode = scrollMode;
+	}
+
+	/**
+	 * Check if currently in scroll-back mode.
+	 * 
+	 * @return true if in scroll mode
+	 */
+	public boolean isScrollMode() {
+		return scrollMode;
+	}
+
+	// Getters / setters
+	public int getScrollBackAid() {
+		return scrollBackAid;
+	}
+
+	public void setScrollBackAid(int aid) {
+		this.scrollBackAid = aid;
+		saveKeyMappings();
+	}
+
+	public int getScrollForwardAid() {
+		return scrollForwardAid;
+	}
+
+	public void setScrollForwardAid(int aid) {
+		this.scrollForwardAid = aid;
+		saveKeyMappings();
+	}
+
+	/**
+	 * Get the data stream debugger instance.
+	 * 
+	 * @return DataStreamDebugger instance
+	 */
+	public DataStreamDebugger getDataStreamDebugger() {
+		return dataStreamDebugger;
+	}
+
+	/**
+	 * Get the scroll-back manager instance.
+	 * 
+	 * @return ScrollBackManager instance
+	 */
+	public ScrollBackManager getScrollBackManager() {
+		return scrollBackManager;
+	}
+
+	/**
+	 * Get the status bar instance.
+	 * 
+	 * @return StatusBar instance
+	 */
+	public StatusBar getStatusBar() {
+		return statusBar;
+	}
+
+	/**
+	 * Get the terminal panel instance.
+	 * 
+	 * @return TerminalPanel instance
+	 */
+	public TerminalPanel getTerminalPanel() {
+		return terminalPanel;
+	}
+
+	/**
+	 * Get the screen model instance.
+	 * 
+	 * @return ScreenModel instance
+	 */
+	public ScreenModel getScreenModel() {
+		return screenModel;
+	}
+
 	@Override
 	public boolean requestFocusInWindow() {
 		if (terminalPanel != null)
@@ -652,6 +763,18 @@ public class TN3270Session extends JPanel implements KeyListener {
 			Map<Integer, KeyMapping> m = (Map<Integer, KeyMapping>) i.readObject();
 			keyMap.clear();
 			keyMap.putAll(m);
+
+			Map<Character, Character> cm = (Map<Character, Character>) i.readObject();
+			inputCharMap.putAll(cm);
+			// NEW: Load scroll-back keys (with defaults if not present)
+			try {
+				scrollBackAid = i.readInt();
+				scrollForwardAid = i.readInt();
+			} catch (Exception e) {
+				// Old file format - use defaults
+				scrollBackAid = AID_PF19;
+				scrollForwardAid = AID_PF20;
+			}
 		} catch (Exception e) {
 		}
 	}
@@ -659,6 +782,10 @@ public class TN3270Session extends JPanel implements KeyListener {
 	public void saveKeyMappings() {
 		try (ObjectOutputStream o = new ObjectOutputStream(new FileOutputStream(KEYMAP_FILE))) {
 			o.writeObject(new HashMap<>(keyMap));
+			o.writeObject(inputCharMap);
+			// NEW: Save scroll-back keys
+			o.writeInt(scrollBackAid);
+			o.writeInt(scrollForwardAid);
 		} catch (Exception e) {
 		}
 	}
@@ -1033,6 +1160,22 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private void process3270Data(byte[] data) {
 		if (data.length < 1)
 			return;
+
+		if (dataStreamDebugger != null && dataStreamDebugger.isDebugMode()) {
+			// Determine the offset where the actual command starts
+			int captureOffset = 0;
+
+			// Check if TN3270E mode with valid header
+			if (tn3270eMode && data.length >= 5 && (data[0] & 0xFF) == TN3270E_DT_3270_DATA) {
+				captureOffset = 5; // Skip TN3270E header
+			}
+
+			// Capture the data stream with the command offset
+			if (captureOffset < data.length) {
+				dataStreamDebugger.captureDataStream(data, captureOffset);
+			}
+		}
+
 		int off = 0;
 		// if (tn3270eMode && data.length >= 5 && data[0] == TN3270E_DT_3270_DATA)
 		// off = 5;
@@ -1147,6 +1290,31 @@ public class TN3270Session extends JPanel implements KeyListener {
 		updateStatusBar();
 	}
 
+	/**
+	 * Replay a data stream for scroll-back functionality. This processes the data
+	 * stream without capturing it again.
+	 * 
+	 * @param data The complete data stream to replay
+	 */
+	public void replayDataStream(byte[] data) {
+		// Temporarily disable debug mode to avoid re-capturing during replay
+		boolean wasDebugMode = false;
+		if (dataStreamDebugger != null) {
+			wasDebugMode = dataStreamDebugger.isDebugMode();
+			dataStreamDebugger.setDebugMode(false);
+		}
+
+		try {
+			// Call the existing processing method
+			process3270Data(data);
+		} finally {
+			// Restore debug mode state
+			if (dataStreamDebugger != null) {
+				dataStreamDebugger.setDebugMode(wasDebugMode);
+			}
+		}
+	}
+
 	private void processOrders(byte[] data, int offset, int initialPos) {
 		int p = initialPos; // FIX: Use passed initial position
 		int i = offset;
@@ -1193,7 +1361,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 						int t = data[i++] & 0xFF;
 						int v = data[i++] & 0xFF;
 
-						//if (t == ATTR_FIELD || t == 0xC0)
+						// if (t == ATTR_FIELD || t == 0xC0)
 						if (t == ATTR_FIELD)
 							a = (byte) v;
 						else if (t == ATTR_FOREGROUND)
@@ -1210,27 +1378,26 @@ public class TN3270Session extends JPanel implements KeyListener {
 					screenModel.setHighlight(p, hl);
 					screenModel.setCharset(p, cs);
 					/*
-					if (p == 562 || p == 642 || p == 722 || p == 882 || p == 561 || p == 641 || p == 721 || p == 881) {
-					    System.out.println(String.format("SFE at p=%d: col=%d hl=%d cs=%d", p, col, hl, cs));
-					}
-					*/
+					 * if (p == 562 || p == 642 || p == 722 || p == 882 || p == 561 || p == 641 || p
+					 * == 721 || p == 881) {
+					 * System.out.println(String.format("SFE at p=%d: col=%d hl=%d cs=%d", p, col,
+					 * hl, cs)); }
+					 */
 					// DO NOT propagate SFE attributes to subsequent text!
 					// The field attribute itself has the color, but characters after it
 					// start with currentColor=0 and get their colors from SA orders.
 					// REMOVED lines that were propagating col/hl/cs to currentColor/etc.
 					// This was causing the first character after a field to inherit the
 					// field color instead of waiting for its own SA color order.
-					
+
 					// Propagate SFE attributes to subsequent text
-					/* Nope, don't do this:
-					if (col != 0)
-						screenModel.setCurrentColor(col);
-					if (hl != 0)
-						screenModel.setCurrentHighlight(hl);
-					if (cs != 0)
-					    screenModel.setCurrentCharset(cs);
-                    */
-					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (SFE) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
+					/*
+					 * Nope, don't do this: if (col != 0) screenModel.setCurrentColor(col); if (hl
+					 * != 0) screenModel.setCurrentHighlight(hl); if (cs != 0)
+					 * screenModel.setCurrentCharset(cs);
+					 */
+					// if (p > 550 && p < 570) System.out.println(String.format("TN3270: (SFE)
+					// Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 					p = (p + 1) % bufLen;
 				}
 			} else if (b == ORDER_SBA) {
@@ -1272,7 +1439,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 						screenModel.setExtendedColor(p, screenModel.getCurrentColor());
 						screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 						screenModel.setCharset(p, screenModel.getCurrentCharset());
-						//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (RA) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
+						// if (p > 550 && p < 570) System.out.println(String.format("TN3270: (RA) Stored
+						// extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 						p = (p + 1) % bufLen;
 					}
 				}
@@ -1306,26 +1474,27 @@ public class TN3270Session extends JPanel implements KeyListener {
 							p = (p + 1) % bufLen;
 						}
 					}
-					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (EUA) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
+					// if (p > 550 && p < 570) System.out.println(String.format("TN3270: (EUA)
+					// Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 				}
 			} else if (b == ORDER_SA) {
 				if (i + 2 < data.length) {
 					int t = data[i++] & 0xFF;
 					byte v = data[i++];
 
-					if (t == ATTR_FOREGROUND) 
+					if (t == ATTR_FOREGROUND)
 						screenModel.setCurrentColor(normalizeColor(v));
 					else if (t == ATTR_HIGHLIGHTING)
 						screenModel.setCurrentHighlight(v);
 					else if (t == ATTR_CHAR_SET)
-						screenModel.setCurrentCharset(v); 
+						screenModel.setCurrentCharset(v);
 					else if (t == ATTR_FIELD) {
-						   if (v == 0x00) {
-							   // Reset all
-							   screenModel.setCurrentColor((byte) 0);
-							   screenModel.setCurrentHighlight((byte) 0);
-							   screenModel.setCurrentCharset((byte) 0);
-						   }
+						if (v == 0x00) {
+							// Reset all
+							screenModel.setCurrentColor((byte) 0);
+							screenModel.setCurrentHighlight((byte) 0);
+							screenModel.setCurrentCharset((byte) 0);
+						}
 					}
 				}
 			} else if (b == ORDER_GE) {
@@ -1354,8 +1523,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 					// so it's difficult to force them to display "taller" than usual. For
 					// now, we just let them be.
 					//
-					
-					//if (p > 550 && p < 570) System.out.println(String.format("TN3270: (GE) Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
+
+					// if (p > 550 && p < 570) System.out.println(String.format("TN3270: (GE) Stored
+					// extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 
 					p = (p + 1) % bufLen;
 				}
@@ -1385,16 +1555,18 @@ public class TN3270Session extends JPanel implements KeyListener {
 				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
 				screenModel.setCharset(p, currentCS);
 				/*
-				if (p == 562 || p == 642 || p == 722 || p == 882) {
-				    System.out.println(String.format("Writing char 0x%02X at p=%d with currentColor=%d", 
-				        b & 0xFF, p, screenModel.getCurrentColor()));
-				}
-*/
-				//if (p > 550 && p < 570) System.out.println(String.format("TN3270: ('%c') Stored extColor at p=%d: %d", c, p, screenModel.getExtendedColor(p) & 0xFF));
-				
+				 * if (p == 562 || p == 642 || p == 722 || p == 882) {
+				 * System.out.println(String.
+				 * format("Writing char 0x%02X at p=%d with currentColor=%d", b & 0xFF, p,
+				 * screenModel.getCurrentColor())); }
+				 */
+				// if (p > 550 && p < 570) System.out.println(String.format("TN3270: ('%c')
+				// Stored extColor at p=%d: %d", c, p, screenModel.getExtendedColor(p) & 0xFF));
+
 				p = (p + 1) % bufLen;
 			}
-			//System.out.println(String.format("TN3270: Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
+			// System.out.println(String.format("TN3270: Stored extColor at p=%d: %d", p,
+			// screenModel.getExtendedColor(p) & 0xFF));
 		}
 	}
 
@@ -1555,12 +1727,36 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	public void sendAID(int aid) {
-	    // FIX: Normalize to unsigned 0-255 to handle signed byte promotion
-	    // 0xF8 as a byte is -8. We need it to be 248 to match the constants.
-	    int cleanAid = aid & 0xFF; 
-	    
-	    lastAID = cleanAid; // Update lastAID with clean value too
+		// FIX: Normalize to unsigned 0-255 to handle signed byte promotion
+		// 0xF8 as a byte is -8. We need it to be 248 to match the constants.
+		int cleanAid = aid & 0xFF;
 		
+	    // === SCROLL-BACK INTERCEPTION (on-screen keyboard panel) ===
+	    // ModernKeyboardPanel calls sendAID() directly; it never goes
+	    // through keyPressed().  Intercept here before anything is sent.
+	    if (dataStreamDebugger != null && dataStreamDebugger.isDebugMode()) {
+	        if (cleanAid == (scrollBackAid & 0xFF)) {
+	            scrollBackManager.scrollBack();
+	            return;                         // do NOT send to host
+	        }
+	        if (cleanAid == (scrollForwardAid & 0xFF) && scrollBackManager.isScrollMode()) {
+	            scrollBackManager.scrollForward();
+	            return;                         // do NOT send to host
+	        }
+	        
+	        // Clear — exit scroll mode without sending to host.
+	        // The on-screen Clear button lands here directly.  The physical
+	        // keyboard path is caught earlier in keyPressed() via the keyMap
+	        // lookup, so it never reaches sendAID(), but this catches the
+	        // on-screen panel button regardless of which physical key is mapped.
+	        if (cleanAid == (AID_CLEAR & 0xFF) && scrollBackManager.isScrollMode()) {
+	            scrollBackManager.forceExit();
+	            return;                         // do NOT send to host
+	        }
+	    }
+
+		lastAID = cleanAid; // Update lastAID with clean value too
+
 		int cPos = screenModel.getCursorPos();
 		keyboardLocked = true;
 		updateStatusBar();
@@ -1573,17 +1769,16 @@ public class TN3270Session extends JPanel implements KeyListener {
 			if (cleanAid == AID_CLEAR)
 				resetReplyModeToDefault();
 
-	        // 2. CRITICAL FIX: Handle Non-Contiguous AID Ranges
-	        // PF1-PF9 are 0xF1-0xF9 (241-249)
-	        // PF10-PF12 are 0x7A-0x7C (122-124)
-	        boolean isPF1_9   = (cleanAid >= AID_PF1 && cleanAid <= AID_PF9); 
-	        boolean isPF10_12 = (cleanAid >= AID_PF10 && cleanAid <= AID_PF12);
-	        boolean isPF13_24 = (cleanAid >= (AID_PF13 & 0xFF) && cleanAid <= (AID_PF24 & 0xFF));
-		    
-		    boolean isReadMod = (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24 || 
-		                         cleanAid == AID_PA1 || cleanAid == AID_PA2 || cleanAid == AID_PA3 || 
-		                         cleanAid == AID_CLEAR);
-		    
+			// 2. CRITICAL FIX: Handle Non-Contiguous AID Ranges
+			// PF1-PF9 are 0xF1-0xF9 (241-249)
+			// PF10-PF12 are 0x7A-0x7C (122-124)
+			boolean isPF1_9 = (cleanAid >= AID_PF1 && cleanAid <= AID_PF9);
+			boolean isPF10_12 = (cleanAid >= AID_PF10 && cleanAid <= AID_PF12);
+			boolean isPF13_24 = (cleanAid >= (AID_PF13 & 0xFF) && cleanAid <= (AID_PF24 & 0xFF));
+
+			boolean isReadMod = (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24 || cleanAid == AID_PA1
+					|| cleanAid == AID_PA2 || cleanAid == AID_PA3 || cleanAid == AID_CLEAR);
+
 			if (isReadMod) {
 				if (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24) {
 					int screenSize = screenModel.getSize();
@@ -1605,7 +1800,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 							if (screenModel.isFieldStart(i) && (screenModel.getAttr(i) & 0x01) != 0) {
 								int fieldStart = i;
 								int end = screenModel.findNextField(i);
-								
+
 								// Find data bounds
 								int dataStart = fieldStart + 1;
 
@@ -3199,7 +3394,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				isError ? JOptionPane.ERROR_MESSAGE : JOptionPane.INFORMATION_MESSAGE);
 	}
 
-	private void updateStatusBar() {
+	public void updateStatusBar() {
 		if (statusBar != null)
 			statusBar.updatePosition(screenModel.getRows(), screenModel.getCols(), screenModel.getCursorPos());
 	}
@@ -3209,7 +3404,49 @@ public class TN3270Session extends JPanel implements KeyListener {
 	// =======================================================================
 
 	public void keyPressed(KeyEvent e) {
-		int keyCode = e.getKeyCode();
+	    // === SCROLL-BACK INTERCEPTION (physical keyboard) ===
+	    // Resolve the keystroke to a 3270 AID and compare against the
+	    // configured scroll AIDs.  This must run before the existing
+	    // Shift+F7 → PF19 logic further down, otherwise that code will
+	    // call sendAID() and the keystroke will be sent to the host.
+	    if (dataStreamDebugger != null && dataStreamDebugger.isDebugMode()) {
+	        int aid = resolveAid(e);
+	        if (aid == scrollBackAid) {
+	            scrollBackManager.scrollBack();
+	            e.consume();
+	            return;
+	        }
+	        if (aid == scrollForwardAid && scrollBackManager.isScrollMode()) {
+	            scrollBackManager.scrollForward();
+	            e.consume();
+	            return;
+	        }
+	    }
+
+	    // === BLOCK INPUT WHILE IN SCROLL MODE ===
+	    if (scrollBackManager != null && scrollBackManager.isScrollMode()) {
+	        int keyCode = e.getKeyCode();
+	        
+	        // User's CLEAR key — exit scroll mode without sending to host.
+	        // We look up keyMap rather than hardcoding VK_ESCAPE because the
+	        // user may have remapped CLEAR to any physical key via Keyboard Settings.
+	        KeyMapping mapping = keyMap.get(keyCode);
+	        if (mapping != null && "CLEAR".equals(mapping.description)) {
+	            scrollBackManager.forceExit();
+	            e.consume();
+	            return;
+	        }
+	        
+	        if (keyCode == KeyEvent.VK_UP || keyCode == KeyEvent.VK_DOWN ||
+	            keyCode == KeyEvent.VK_LEFT || keyCode == KeyEvent.VK_RIGHT ||
+	            keyCode == KeyEvent.VK_HOME || keyCode == KeyEvent.VK_TAB) {
+	            processCursorMovement(e);
+	        }
+	        e.consume();   // swallow everything else
+	        return;
+	    }
+
+	    int keyCode = e.getKeyCode();
 		if (keyCode == KeyEvent.VK_CONTROL || keyCode == KeyEvent.VK_META || keyCode == KeyEvent.VK_ALT
 				|| keyCode == KeyEvent.VK_SHIFT)
 			return;
@@ -3416,6 +3653,101 @@ public class TN3270Session extends JPanel implements KeyListener {
 			updateStatusBar();
 			return;
 		}
+	}
+	
+	/**
+	 * Given a KeyEvent, return the 3270 AID it would produce, or -1 if it
+	 * does not map to a PF key.
+	 *
+	 * PF_AID[] is zero-indexed PF1–PF24, so:
+	 *   unshifted F1–F12  →  PF_AID[fKey - 1]       (indices 0–11,  PF1–PF12)
+	 *   shifted   F1–F12  →  PF_AID[fKey + 11]      (indices 12–23, PF13–PF24)
+	 */
+	private int resolveAid(KeyEvent e) {
+	    int keyCode = e.getKeyCode();
+
+	    if (keyCode >= KeyEvent.VK_F1 && keyCode <= KeyEvent.VK_F12) {
+	        int fKey = keyCode - KeyEvent.VK_F1 + 1;   // 1-based: 1..12
+	        int pfIndex = e.isShiftDown() ? (fKey + 11) : (fKey - 1);
+	        return PF_AID[pfIndex];
+	    }
+
+	    // Not a PF key
+	    return -1;
+	}
+	
+	/**
+	 * Given a KeyEvent, return the 3270 AID it would produce, or -1 if it
+	 * does not map to a PF key.
+	 * This mirrors the logic already in keyPressed() so we can compare
+	 * against scroll-key AIDs before the rest of that method runs.
+	 */
+	private int resolveAidOld(KeyEvent e) {
+	    int keyCode = e.getKeyCode();
+
+	    // --- F1-F12 (unshifted = PF1-12, shifted = PF13-24) ---
+	    if (keyCode >= KeyEvent.VK_F1 && keyCode <= KeyEvent.VK_F12) {
+	        int fKey = keyCode - KeyEvent.VK_F1 + 1;   // 1-based: 1..12
+	        if (e.isShiftDown()) {
+	            // PF13-PF24
+	            if (fKey <= 9)  return 0xC1 + (fKey - 1);   // PF13(0xC1)..PF21(0xC9)
+	            if (fKey == 10) return 0x4A;                  // PF22
+	            if (fKey == 11) return 0x4B;                  // PF23
+	            return 0x4C;                                  // PF24
+	        } else {
+	            // PF1-PF12
+	            if (fKey <= 9)  return 0xF1 + (fKey - 1);   // PF1(0xF1)..PF9(0xF9)
+	            if (fKey == 10) return 0x7A;                  // PF10
+	            if (fKey == 11) return 0x7B;                  // PF11
+	            return 0x7C;                                  // PF12
+	        }
+	    }
+
+	    // Not a PF key
+	    return -1;
+	}
+
+	/**
+	 * Process cursor movement in scroll-back mode. Updates cursor position and
+	 * status bar but doesn't send to host.
+	 * 
+	 * @param e The KeyEvent
+	 */
+	private void processCursorMovement(KeyEvent e) {
+		int pos = screenModel.getCursorPos();
+		int cols = screenModel.getCols();
+		int size = screenModel.getSize();
+
+		switch (e.getKeyCode()) {
+		case KeyEvent.VK_UP:
+			pos = (pos - cols + size) % size;
+			break;
+		case KeyEvent.VK_DOWN:
+			pos = (pos + cols) % size;
+			break;
+		case KeyEvent.VK_LEFT:
+			pos = (pos - 1 + size) % size;
+			break;
+		case KeyEvent.VK_RIGHT:
+			pos = (pos + 1) % size;
+			break;
+		case KeyEvent.VK_HOME:
+			pos = 0;
+			break;
+		case KeyEvent.VK_TAB:
+			// Find next field (reuse existing logic if available)
+			// If you have a findNextField() method, use it:
+			// pos = findNextField(pos, true);
+			// Otherwise, simple tab behavior:
+			pos = ((pos / cols) * cols) + cols; // Move to start of next row
+			if (pos >= size)
+				pos = 0;
+			break;
+		}
+
+		screenModel.setCursorPos(pos);
+		terminalPanel.repaint();
+		updateStatusBar();
 	}
 
 	public void keyTyped(KeyEvent e) {
