@@ -30,6 +30,8 @@ import static com.tn3270.constants.ProtocolConstants.CMD_READ_BUFFER_02;
 import static com.tn3270.constants.ProtocolConstants.CMD_READ_BUFFER_F2;
 import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_06;
 import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_F6;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_06;
+import static com.tn3270.constants.ProtocolConstants.CMD_READ_MODIFIED_ALL_6E;
 import static com.tn3270.constants.ProtocolConstants.CMD_WRITE_01;
 import static com.tn3270.constants.ProtocolConstants.CMD_WRITE_F1;
 import static com.tn3270.constants.ProtocolConstants.CMD_WSF_11;
@@ -80,6 +82,7 @@ import static com.tn3270.util.EBCDIC.EBCDIC_TO_ASCII;
 
 import com.tn3270.util.LoggerSetup;
 import com.tn3270.debug.DataStreamDebugger;
+import com.tn3270.debug.StreamRecorder;
 import com.tn3270.debug.ScrollBackManager;
 
 import java.awt.BorderLayout;
@@ -201,6 +204,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private static final int STATE_DONT = 6;
 
 	private static final byte SFID_SET_REPLY_MODE = (byte) 0x09;
+	
+    private boolean scsCtlCodes = false;
+    private boolean bindImage = false;
+    private boolean sysreq = false;
+    private boolean dataStreamCtl = false;
+    private boolean responses = false;
 
 	private enum FileTransferState {
 		IDLE, OPEN_SENT, TRANSFER_IN_PROGRESS, CLOSE_SENT, ERROR
@@ -366,6 +375,18 @@ public class TN3270Session extends JPanel implements KeyListener {
 	private boolean tn3270eAttempted = false;
 	private int replyModeFlags = 0;
 	private ReplyMode currentReplyMode = ReplyMode.FIELD;
+	
+	private boolean supportsResponses = false;
+	private boolean supportsBindImage = false;
+	private int outboundSequenceNumber = 0;
+
+	// Data stream type constants for TN3270E
+	public static final int DT_3270_DATA    = 0x00;
+	public static final int DT_SCS_DATA     = 0x01;
+	public static final int DT_RESPONSE     = 0x02;
+	public static final int DT_BIND_IMAGE   = 0x03;
+	public static final int DT_NVT_DATA     = 0x04;
+	public static final int DT_SSCP_LU_DATA = 0x05;
 
 	// File Transfer
 	private FileTransferState ftState = FileTransferState.IDLE;
@@ -394,6 +415,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 	private DataStreamDebugger dataStreamDebugger;
 	private ScrollBackManager scrollBackManager;
+	// Always-on, bounded recorder of inbound/outbound 3270 streams (independent of debug mode).
+	private final StreamRecorder streamRecorder = new StreamRecorder(64);
+
 	private boolean scrollMode = false;
 
 	private boolean isProgrammaticResize = false;
@@ -705,6 +729,31 @@ public class TN3270Session extends JPanel implements KeyListener {
 	public DataStreamDebugger getDataStreamDebugger() {
 		return dataStreamDebugger;
 	}
+	
+	/** Always-on stream recorder (see StreamRecorder). */
+	public StreamRecorder getStreamRecorder() {
+		return streamRecorder;
+	}
+ 
+	/** Full text report of the recorded streams (for a toolbar/menu action). */
+	public String getStreamReport() {
+		return streamRecorder.formatReport(screenModel);
+	}
+ 
+	/** Write the recorded streams to ~/tn3270-dumps/tn3270-streams-<timestamp>.txt. */
+	public File dumpStreams() {
+		try {
+			File dir = new File(System.getProperty("user.home"), "tn3270-dumps");
+			File f = streamRecorder.writeReport(dir, screenModel);
+			logger.info("Stream recorder dump written: " + f.getAbsolutePath());
+			if (statusBar != null)
+				statusBar.setStatus("Stream dump: " + f.getAbsolutePath());
+			return f;
+		} catch (IOException ex) {
+			logger.warning("Stream dump failed: " + ex.getMessage());
+			return null;
+		}
+	}
 
 	/**
 	 * Get the scroll-back manager instance.
@@ -892,6 +941,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 				input = socket.getInputStream();
 				output = socket.getOutputStream();
 				connected = true;
+				streamRecorder.note("CONNECT " + h + ":" + p);
 				tn3270eAttempted = false;
 				tn3270eMode = false;
 				screenModel.clearScreen();
@@ -913,6 +963,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	public void disconnect() {
+		if (connected)
+			streamRecorder.note("DISCONNECT");
 		connected = false;
 		try {
 			if (socket != null)
@@ -972,7 +1024,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 							ts = STATE_DONT;
 						else if (b == EOR) {
 							if (dataStream.size() > 0) {
+								byte[] inboundRecord = dataStream.toByteArray();
+								streamRecorder.recordInbound(inboundRecord, tn3270eMode, screenModel.getRows(),
+										screenModel.getCols());
 								process3270Data(dataStream.toByteArray());
+								streamRecorder.attachPostState(screenModel);
 								dataStream.reset();
 							}
 							ts = STATE_DATA;
@@ -1106,16 +1162,28 @@ public class TN3270Session extends JPanel implements KeyListener {
 				b.write(OPT_TN3270E);
 				b.write(TN3270E_OP_FUNCTIONS);
 				b.write(TN3270E_OP_REQUEST);
-				b.write(0x00);
-				b.write(0x01);
-				b.write(0x02);
-				b.write(0x03);
+				b.write(0x00);       // BIND-IMAGE
+				b.write(0x01);       // SCS-CTL-CODES
+				b.write(0x02);       // RESPONSES
+				//b.write(0x03);       // SYSREQ - REMOVED: 0x03 (Invalid per RFC 2355)
 				b.write(IAC);
 				b.write(SE);
 				output.write(b.toByteArray());
 				output.flush();
 			} else if (op == TN3270E_OP_FUNCTIONS) {
 				if (d[2] == TN3270E_OP_IS) {
+					// Parse the functions confirmed by the host
+					
+	                supportsBindImage = false;
+	                supportsResponses = false;
+	                for (int idx = 3; idx < d.length; idx++) {
+	                    int func = d[idx] & 0xFF;
+	                    if (func == 0x00) supportsBindImage = true;
+	                    if (func == 0x02) supportsResponses = true;
+	                }
+	                
+	                tn3270eMode = true;
+	                
 					sendQueryResponse();
 				} else if (d[2] == TN3270E_OP_REQUEST) {
 					ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -1124,6 +1192,15 @@ public class TN3270Session extends JPanel implements KeyListener {
 					b.write(OPT_TN3270E);
 					b.write(TN3270E_OP_FUNCTIONS);
 					b.write(TN3270E_OP_IS);
+					
+					// NOT sending 00, 01, 02, and 03 in sequence below, breaks OSA ICC!!!!
+					// (I think the code below is wrong anyway, as it assumes there were 3 function
+					// bytes requested by the host, so we may be sending garbage).
+					// Copy all function bytes requested by the server (starting at index 3 in d)
+	                //for (int i = 3; i < d.length; i++) {
+	                //    b.write(d[i]);
+	                //}
+	                
 					b.write(0x00);
 					b.write(0x01);
 					b.write(0x02);
@@ -1259,7 +1336,9 @@ public class TN3270Session extends JPanel implements KeyListener {
 			}
 			keyboardLocked = false;
 		} else if (cmd == CMD_READ_MODIFIED_F6 || cmd == CMD_READ_MODIFIED_06)
-			sendAID(lastAID);
+		    sendAID(lastAID, false);
+		else if (cmd == CMD_READ_MODIFIED_ALL_6E)
+			sendAID(lastAID, true);
 		else if (cmd == CMD_READ_BUFFER_02 || cmd == CMD_READ_BUFFER_F2)
 			sendReadBuffer();
 		else if (cmd == CMD_WSF_11 || cmd == CMD_WSF_F3)
@@ -1314,8 +1393,223 @@ public class TN3270Session extends JPanel implements KeyListener {
 			}
 		}
 	}
-
+	
 	private void processOrders(byte[] data, int offset, int initialPos) {
+        int p = initialPos; // FIX: Use passed initial position
+        int i = offset;
+        int[] idx = { 0 };
+        char c;
+        int bufLen = screenModel.getSize();
+        
+        // Initialize persistent stream state across the entire data stream pass
+        byte activeColor = screenModel.getCurrentColor();
+        byte activeHighlight = screenModel.getCurrentHighlight();
+        byte activeCharset = screenModel.getCurrentCharset();
+
+        while (i < data.length) {
+            int b = data[i++] & 0xFF;
+
+            if (b == ORDER_SF) {
+                if (i < data.length) {
+                    screenModel.setAttr(p, data[i++]);
+                    screenModel.setChar(p, ' ');
+                    screenModel.setExtendedColor(p, (byte) 0);
+                    screenModel.setHighlight(p, (byte) 0);
+                    screenModel.setCharset(p, (byte) 0); // Reset for field start
+                    
+                    // Preserve active stream state across plain SF boundaries
+                    screenModel.setCurrentColor(activeColor);
+                    screenModel.setCurrentHighlight(activeHighlight);
+                    screenModel.setCurrentCharset(activeCharset);
+
+                    p = (p + 1) % bufLen;
+                }
+            } else if (b == ORDER_SFE) {
+                if (i < data.length) {
+                    int count = data[i++] & 0xFF;
+                    byte a = 0;
+                    byte col = activeColor;        // Default to current active stream color
+                    byte hl = activeHighlight;    // Default to current active stream highlight
+                    byte cs = activeCharset;      // Default to current active stream charset
+                    
+                    boolean hasCol = false;
+                    boolean hasHl = false;
+                    boolean hasCs = false;
+
+                    for (int k = 0; k < count; k++) {
+                        if (i + 1 >= data.length)
+                            break;
+                        int t = data[i++] & 0xFF;
+                        int v = data[i++] & 0xFF;
+
+                        if (t == ATTR_FIELD)
+                            a = (byte) v;
+                        else if (t == ATTR_FOREGROUND) {
+                            byte normalized = normalizeColor((byte) v);
+                            if (normalized != 0) {
+                                col = normalized;
+                                hasCol = true;
+                            }
+                        } else if (t == ATTR_HIGHLIGHTING) {
+                            if (v != 0) {
+                                hl = (byte) v;
+                                hasHl = true;
+                            }
+                        } else if (t == ATTR_CHAR_SET) {
+                            if (v != 0) {
+                                cs = (byte) v; // Capture Charset
+                                hasCs = true;
+                            }
+                        }
+                    }
+                    
+                    // Apply attributes to the field attribute cell p
+                    screenModel.setChar(p, ' ');
+                    screenModel.setAttr(p, a);
+                    screenModel.setExtendedColor(p, col);
+                    screenModel.setHighlight(p, hl);
+                    screenModel.setCharset(p, cs);
+
+                    // FIX: SFE defines the field's attributes locally, but must NOT 
+                    // clobber the global stream-level active color or highlight state.
+                    // Leave stream color/highlight isolation strictly to SA orders.
+                    if (hasCs) {
+                        activeCharset = cs;
+                        screenModel.setCurrentCharset(cs);
+                    }
+                    
+                    p = (p + 1) % bufLen;
+                }
+            } else if (b == ORDER_SBA) {
+                if (i + 1 < data.length) {
+                    p = decode3270Address(data[i], data[i + 1]);
+                    i += 2;
+                }
+            } else if (b == ORDER_IC) {
+                screenModel.setCursorPos(p);
+            } else if (b == ORDER_PT) { // Program Tab (0x05)
+                int start = p;
+                while (true) {
+                    p = (p + 1) % bufLen;
+                    if (screenModel.isFieldStart(p))
+                        continue;
+                    if (!screenModel.isProtected(p))
+                        break; // Found unprotected
+                    if (p == start)
+                        break; // Loop safety
+                }
+            } else if (b == ORDER_RA) {
+                if (i + 1 < data.length) {          // was: i + 2 < data.length
+                    int end = decode3270Address(data[i], data[i + 1]);
+                    idx[0] = i + 2;
+                    c = fetchDisplayChar(data, idx); // Checks for GE
+                    i = idx[0];
+
+                    while (p != end) {
+                        screenModel.setChar(p, c);
+                        screenModel.setAttr(p, (byte) 0);
+                        screenModel.setExtendedColor(p, activeColor);
+                        screenModel.setHighlight(p, activeHighlight);
+                        screenModel.setCharset(p, activeCharset);
+                        
+                        p = (p + 1) % bufLen;
+                    }
+                }
+            } else if (b == ORDER_EUA) {
+                if (i + 1 < data.length) {
+                    int end = decode3270Address(data[i], data[i + 1]);
+                    i += 2;
+                    if (p == end) {
+                        for (int k = 0; k < bufLen; k++) {
+                            if (!screenModel.isProtected(k) && !screenModel.isFieldStart(k)) {
+                                screenModel.setChar(k, '\0');
+                                screenModel.setExtendedColor(k, (byte) 0);
+                                screenModel.setHighlight(k, (byte) 0);
+                            }
+                        }
+                    } else {
+                        while (p != end) {
+                            if (!screenModel.isProtected(p) && !screenModel.isFieldStart(p)) {
+                                screenModel.setChar(p, '\0');
+                                screenModel.setExtendedColor(p, (byte) 0);
+                                screenModel.setHighlight(p, (byte) 0);
+                                screenModel.setCharset(p, (byte) 0);
+                            }
+                            p = (p + 1) % bufLen;
+                        }
+                    }
+                }
+            } else if (b == ORDER_SA) {
+                if (i + 1 < data.length) {
+                    int t = data[i++] & 0xFF;
+                    byte v = data[i++];
+
+                    if (t == ATTR_FOREGROUND) {
+                        activeColor = normalizeColor(v);
+                        screenModel.setCurrentColor(activeColor);
+                    } else if (t == ATTR_HIGHLIGHTING) {
+                        activeHighlight = v;
+                        screenModel.setCurrentHighlight(activeHighlight);
+                    } else if (t == ATTR_CHAR_SET) {
+                        activeCharset = v;
+                        screenModel.setCurrentCharset(activeCharset);
+                    }
+                    else if (t == ATTR_FIELD) {
+                        if (v == 0x00) {
+                            activeColor = 0;
+                            activeHighlight = 0;
+                            activeCharset = 0;
+                            // Reset all
+                            screenModel.setCurrentColor((byte) 0);
+                            screenModel.setCurrentHighlight((byte) 0);
+                            screenModel.setCurrentCharset((byte) 0);
+                        }
+                    }
+                }
+            } else if (b == ORDER_GE) {
+                // Graphic Escape (0x08) - Single Character Override
+                if (i < data.length) {
+                    byte val = data[i++];
+
+                    if ((val & 0xFF) == 0x4F) {
+                        c = '|';
+                    } else {
+                        c = EBCDIC_TO_APL[val & 0xFF];
+                    }
+
+                    screenModel.setChar(p, c);
+                    screenModel.setAttr(p, (byte) 0);
+                    screenModel.setExtendedColor(p, activeColor);
+                    screenModel.setHighlight(p, activeHighlight);
+                    screenModel.setCharset(p, CHARSET_APL);
+
+                    p = (p + 1) % bufLen;
+                }
+            } else {
+                if ((b & 0xFF) == 0x4F) {
+                    c = '|';
+                } else {
+                    if ((activeCharset & 0xFF) == (CHARSET_APL & 0xFF)) {
+                        // Use APL Table
+                        c = EBCDIC_TO_APL[b & 0xFF];
+                    } else {
+                        // Use Standard Table
+                        c = EBCDIC_TO_ASCII[b & 0xFF];
+                    }
+                }
+
+                screenModel.setChar(p, c);
+                screenModel.setAttr(p, (byte) 0);
+                screenModel.setExtendedColor(p, activeColor);
+                screenModel.setHighlight(p, activeHighlight);
+                screenModel.setCharset(p, activeCharset);
+
+                p = (p + 1) % bufLen;
+            }
+        }
+    }
+
+	private void processOrdersYes(byte[] data, int offset, int initialPos) {
 		int p = initialPos; // FIX: Use passed initial position
 		int i = offset;
 		int[] idx = { 0 };
@@ -1323,9 +1617,14 @@ public class TN3270Session extends JPanel implements KeyListener {
 		int bufLen = screenModel.getSize();
 
 		// Reset state at start of Write/Erase Write
-		screenModel.setCurrentColor((byte) 0);
-		screenModel.setCurrentHighlight((byte) 0);
-		screenModel.setCurrentCharset((byte) 0); // Default Charset: 0 = Standard, 1 = APL
+		//screenModel.setCurrentColor((byte) 0);
+		//screenModel.setCurrentHighlight((byte) 0);
+		//screenModel.setCurrentCharset((byte) 0); // Default Charset: 0 = Standard, 1 = APL
+		
+		// Initialize persistent stream state across the entire data stream pass
+		byte activeColor = screenModel.getCurrentColor();
+		byte activeHighlight = screenModel.getCurrentHighlight();
+		byte activeCharset = screenModel.getCurrentCharset();
 
 		while (i < data.length) {
 			int b = data[i++] & 0xFF;
@@ -1339,21 +1638,34 @@ public class TN3270Session extends JPanel implements KeyListener {
 					screenModel.setCharset(p, (byte) 0); // Reset for field start
 
 					// SF resets currents
-					screenModel.setCurrentColor((byte) 0);
-					screenModel.setCurrentHighlight((byte) 0);
-					screenModel.setCurrentCharset((byte) 0);
+					//screenModel.setCurrentColor((byte) 0);
+					//screenModel.setCurrentHighlight((byte) 0);
+					//screenModel.setCurrentCharset((byte) 0);
+					
+					// Preserve active stream state across plain SF boundaries
+					screenModel.setCurrentColor(activeColor);
+					screenModel.setCurrentHighlight(activeHighlight);
+					screenModel.setCurrentCharset(activeCharset);
 
 					p = (p + 1) % bufLen;
 				}
 			} else if (b == ORDER_SFE) {
 				if (i < data.length) {
 					int count = data[i++] & 0xFF;
-					byte a = 0, col = 0, hl = 0, cs = 0;
+					//byte a = 0, col = 0, hl = 0, cs = 0;
+					byte a = 0;
+			        byte col = activeColor;       // Default to current active stream color
+			        byte hl = activeHighlight;    // Default to current active stream highlight
+			        byte cs = activeCharset;      // Default to current active stream charset
+			        
+					boolean hasCol = false;
+					boolean hasHl = false;
+					boolean hasCs = false;
 
 					// SFE resets currents logic? Usually yes for the field.
-					screenModel.setCurrentColor((byte) 0);
-					screenModel.setCurrentHighlight((byte) 0);
-					screenModel.setCurrentCharset((byte) 0);
+					//screenModel.setCurrentColor((byte) 0);
+					//screenModel.setCurrentHighlight((byte) 0);
+					//screenModel.setCurrentCharset((byte) 0);
 
 					for (int k = 0; k < count; k++) {
 						if (i + 1 >= data.length)
@@ -1364,19 +1676,96 @@ public class TN3270Session extends JPanel implements KeyListener {
 						// if (t == ATTR_FIELD || t == 0xC0)
 						if (t == ATTR_FIELD)
 							a = (byte) v;
-						else if (t == ATTR_FOREGROUND)
-							col = normalizeColor((byte) v);
-						else if (t == ATTR_HIGHLIGHTING)
-							hl = (byte) v;
-						else if (t == ATTR_CHAR_SET)
-							cs = (byte) v; // Capture Charset
+						else if (t == ATTR_FOREGROUND) {
+							//col = normalizeColor((byte) v);
+							byte normalized = normalizeColor((byte) v);
+							// If the host sends 0x00 (default color), preserve active color instead of wiping it
+			                if (normalized != 0) {
+			                    col = normalized;
+			                    hasCol = true;
+			                }
+							//hasCol = true;
+						} else if (t == ATTR_HIGHLIGHTING) {
+							if (v != 0) {
+								hl = (byte) v;
+								hasHl = true;
+							}
+						} else if (t == ATTR_CHAR_SET) {
+							if (v != 0) {
+								cs = (byte) v; // Capture Charset
+								hasCs = true;
+							}
+						}
 					}
+					
+					// Apply attributes to the field attribute cell p
+			        screenModel.setChar(p, ' ');
+			        screenModel.setAttr(p, a);
+			        screenModel.setExtendedColor(p, col);
+			        screenModel.setHighlight(p, hl);
+			        screenModel.setCharset(p, cs);
 
-					screenModel.setChar(p, ' ');
-					screenModel.setAttr(p, a);
-					screenModel.setExtendedColor(p, col);
-					screenModel.setHighlight(p, hl);
-					screenModel.setCharset(p, cs);
+					//screenModel.setChar(p, ' ');
+					//screenModel.setAttr(p, a);
+					//screenModel.setExtendedColor(p, col);
+					//screenModel.setHighlight(p, hl);
+					//screenModel.setCharset(p, cs);
+					//screenModel.setExtendedColor(p, hasCol ? col : activeColor);
+			        //screenModel.setHighlight(p, hasHl ? hl : activeHighlight);
+			        //screenModel.setCharset(p, hasCs ? cs : activeCharset);
+					
+			        // Character set from the SFE becomes current for following data.
+			        // Color is intentionally NOT propagated (avoids the earlier bleed bug).
+			        //screenModel.setCurrentCharset(cs);
+					
+					// Update persistent active stream state if specified in SFE
+					// ONLY persist the charset for APL/box-drawing. 
+					// Leave color and highlight isolation to SA orders, matching original intent.
+					
+					if (hasCs) {
+						activeCharset = cs;
+						screenModel.setCurrentCharset(cs);
+					}
+					/*
+					if (col != 0) {
+						activeColor = col;
+						screenModel.setCurrentColor(col);
+					}
+					if (hl != 0) {
+						activeHighlight = hl;
+						screenModel.setCurrentHighlight(hl);
+					}
+					*/
+					// Update persistent active stream state for this field.
+                    // Unconditional assignment ensures that fields omitting color/highlight 
+                    // correctly reset to 0 (default), stopping bleed into subsequent fields.
+                    //activeCharset = cs;
+                    //screenModel.setCurrentCharset(cs);
+
+                    //activeColor = col;
+                    //screenModel.setCurrentColor(col);
+
+                    //activeHighlight = hl;
+                    //screenModel.setCurrentHighlight(hl);
+					
+					// Apply field-specific extended attributes for position p ONLY.
+                    // Do not allow local unassigned SFE attributes to bleed into global active stream defaults.
+                    if (hasCol) {
+                            activeColor = col;
+                            screenModel.setCurrentColor(col);
+                    //} else {
+                    //        activeColor = 0;
+                    //        screenModel.setCurrentColor((byte) 0);
+                    }
+
+                    if (hasHl) {
+                            activeHighlight = hl;
+                            screenModel.setCurrentHighlight(hl);
+                    //} else {
+                    //        activeHighlight = 0;
+                    //        screenModel.setCurrentHighlight((byte) 0);
+                    }
+			        
 					/*
 					 * if (p == 562 || p == 642 || p == 722 || p == 882 || p == 561 || p == 641 || p
 					 * == 721 || p == 881) {
@@ -1422,7 +1811,8 @@ public class TN3270Session extends JPanel implements KeyListener {
 						break; // Loop safety
 				}
 			} else if (b == ORDER_RA) {
-				if (i + 2 < data.length) {
+				//if (i + 2 < data.length) {
+				if (i + 1 < data.length) {          // was: i + 2 < data.length
 					int end = decode3270Address(data[i], data[i + 1]);
 					idx[0] = i + 2;
 					// Note: RA might need to respect GE order if present?
@@ -1436,9 +1826,13 @@ public class TN3270Session extends JPanel implements KeyListener {
 					while (p != end) {
 						screenModel.setChar(p, c);
 						screenModel.setAttr(p, (byte) 0);
-						screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-						screenModel.setHighlight(p, screenModel.getCurrentHighlight());
-						screenModel.setCharset(p, screenModel.getCurrentCharset());
+						//screenModel.setExtendedColor(p, screenModel.getCurrentColor());
+						//screenModel.setHighlight(p, screenModel.getCurrentHighlight());
+						//screenModel.setCharset(p, screenModel.getCurrentCharset());
+						screenModel.setExtendedColor(p, activeColor);
+						screenModel.setHighlight(p, activeHighlight);
+						screenModel.setCharset(p, activeCharset);
+						
 						// if (p > 550 && p < 570) System.out.println(String.format("TN3270: (RA) Stored
 						// extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 						p = (p + 1) % bufLen;
@@ -1469,7 +1863,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 								screenModel.setChar(p, '\0');
 								screenModel.setExtendedColor(p, (byte) 0);
 								screenModel.setHighlight(p, (byte) 0);
-								// screenModel.setCharset(p, (byte) 0); // We probably need this
+								screenModel.setCharset(p, (byte) 0); // We probably need this
 							}
 							p = (p + 1) % bufLen;
 						}
@@ -1478,18 +1872,30 @@ public class TN3270Session extends JPanel implements KeyListener {
 					// Stored extColor at p=%d: %d", p, screenModel.getExtendedColor(p) & 0xFF));
 				}
 			} else if (b == ORDER_SA) {
-				if (i + 2 < data.length) {
+				if (i + 1 < data.length) {
 					int t = data[i++] & 0xFF;
 					byte v = data[i++];
 
-					if (t == ATTR_FOREGROUND)
-						screenModel.setCurrentColor(normalizeColor(v));
-					else if (t == ATTR_HIGHLIGHTING)
-						screenModel.setCurrentHighlight(v);
-					else if (t == ATTR_CHAR_SET)
-						screenModel.setCurrentCharset(v);
+					if (t == ATTR_FOREGROUND) {
+						activeColor = normalizeColor(v);
+						//screenModel.setCurrentColor(normalizeColor(v));
+						screenModel.setCurrentColor(activeColor);
+					} else if (t == ATTR_HIGHLIGHTING) {
+						activeHighlight = v;
+						//screenModel.setCurrentHighlight(v);
+						screenModel.setCurrentHighlight(activeHighlight);
+					} else if (t == ATTR_CHAR_SET) {
+						activeCharset = v;
+						//screenModel.setCurrentCharset(v);
+						screenModel.setCurrentCharset(activeCharset);
+					//System.out.printf("SA CHARSET → %02X  (pencil now %02X)%n",
+				    //        v & 0xFF, screenModel.getCurrentCharset() & 0xFF);    //new
+					}
 					else if (t == ATTR_FIELD) {
 						if (v == 0x00) {
+							activeColor = 0;
+							activeHighlight = 0;
+							activeCharset = 0;
 							// Reset all
 							screenModel.setCurrentColor((byte) 0);
 							screenModel.setCurrentHighlight((byte) 0);
@@ -1514,8 +1920,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 
 					screenModel.setChar(p, c);
 					screenModel.setAttr(p, (byte) 0);
-					screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-					screenModel.setHighlight(p, screenModel.getCurrentHighlight());
+					//screenModel.setExtendedColor(p, screenModel.getCurrentColor());
+					//screenModel.setHighlight(p, screenModel.getCurrentHighlight());
+					//screenModel.setCharset(p, CHARSET_APL);
+					screenModel.setExtendedColor(p, activeColor);
+					screenModel.setHighlight(p, activeHighlight);
 					screenModel.setCharset(p, CHARSET_APL);
 
 					//
@@ -1531,29 +1940,58 @@ public class TN3270Session extends JPanel implements KeyListener {
 				}
 			} else {
 				// Standard Character
-				byte currentCS = screenModel.getCurrentCharset();
+				//byte currentCS = screenModel.getCurrentCharset();
+				
+				//if ((b & 0xFF) == 0x85) {
+				    //System.out.printf("0x85 at pos %d  currentCS=%02X  → %s%n",
+				    //        p, currentCS & 0xFF,
+				    //        (currentCS == CHARSET_APL) ? "APL" : "BASE");
+				  //  System.out.printf("DATA 85 at pos %d  pencil=%02X  APL? %b%n",
+				  //          p, currentCS & 0xFF, currentCS == CHARSET_APL);
+				  //  char ch = screenModel.getChar(319);
+				  //  System.out.printf("Buffer[319] = U+%04X '%c'%n", (int)ch, ch);
+				//}
 
 				// Even if we are in APL mode (currentCS == APL),
 				// if the byte is 0x4F, store it as '|'.
 				if ((b & 0xFF) == 0x4F) {
 					c = '|';
 				} else {
-					if (currentCS == CHARSET_APL) {
+					if ((activeCharset & 0xFF) == (CHARSET_APL & 0xFF)) {
+					//if ((currentCS & 0xFF) == (CHARSET_APL & 0xFF)) {
 						// Use APL Table
 						c = EBCDIC_TO_APL[b & 0xFF];
 					} else {
 						// Use Standard Table
 						c = EBCDIC_TO_ASCII[b & 0xFF];
-						if (c == '\0')
-							c = ' ';
+						//if (c == '\0')
+						//	c = ' ';
 					}
 				}
+				
+				// After the normal translation to 'c':
+				//if ((b & 0xFF) == 0x85 && c == 'e') {
+				    // Only promote to a vertical bar when this looks like a
+				    // protected/numeric box-drawing cell (the MULTITYPE pattern).
+				//    int fs = screenModel.findFieldStart(p);
+				//    if (fs >= 0) {
+				//        byte a = screenModel.getAttr(fs);
+				//        boolean prot    = (a & 0x20) != 0;
+				//        boolean numeric = (a & 0x10) != 0;
+				//        if (prot && numeric) {
+				//            c = '\u2502';
+				//        }
+				//    }
+				//}
 
 				screenModel.setChar(p, c);
 				screenModel.setAttr(p, (byte) 0);
-				screenModel.setExtendedColor(p, screenModel.getCurrentColor());
-				screenModel.setHighlight(p, screenModel.getCurrentHighlight());
-				screenModel.setCharset(p, currentCS);
+				//screenModel.setExtendedColor(p, screenModel.getCurrentColor());
+				//screenModel.setHighlight(p, screenModel.getCurrentHighlight());
+				//screenModel.setCharset(p, currentCS);
+				screenModel.setExtendedColor(p, activeColor);
+				screenModel.setHighlight(p, activeHighlight);
+				screenModel.setCharset(p, activeCharset);
 				/*
 				 * if (p == 562 || p == 642 || p == 722 || p == 882) {
 				 * System.out.println(String.
@@ -1725,7 +2163,152 @@ public class TN3270Session extends JPanel implements KeyListener {
 			e.printStackTrace();
 		}
 	}
+	//here
+	public void sendAID(int aid) {
+		sendAID(aid, false);
+	}
 
+	/**
+	 * @param includeProtected  IBM GA23-0059: false = Read Modified (only
+	 *        unprotected fields with MDT set — normal AID-key behavior).
+	 *        true = Read Modified All (every field with MDT set, protected
+	 *        or not — used only when the host explicitly issues command
+	 *        0x6E, never on a plain user keystroke).
+	 */
+	public void sendAID(int aid, boolean includeProtected) {
+		// FIX: Normalize to unsigned 0-255 to handle signed byte promotion
+		// 0xF8 as a byte is -8. We need it to be 248 to match the constants.
+		int cleanAid = aid & 0xFF;
+		
+	    // === SCROLL-BACK INTERCEPTION (on-screen keyboard panel) ===
+	    // ModernKeyboardPanel calls sendAID() directly; it never goes
+	    // through keyPressed().  Intercept here before anything is sent.
+	    if (dataStreamDebugger != null && dataStreamDebugger.isDebugMode()) {
+	        if (cleanAid == (scrollBackAid & 0xFF)) {
+	            scrollBackManager.scrollBack();
+	            return;                         // do NOT send to host
+	        }
+	        if (cleanAid == (scrollForwardAid & 0xFF) && scrollBackManager.isScrollMode()) {
+	            scrollBackManager.scrollForward();
+	            return;                         // do NOT send to host
+	        }
+	        
+	        // Clear — exit scroll mode without sending to host.
+	        // The on-screen Clear button lands here directly.  The physical
+	        // keyboard path is caught earlier in keyPressed() via the keyMap
+	        // lookup, so it never reaches sendAID(), but this catches the
+	        // on-screen panel button regardless of which physical key is mapped.
+	        if (cleanAid == (AID_CLEAR & 0xFF) && scrollBackManager.isScrollMode()) {
+	            scrollBackManager.forceExit();
+	            return;                         // do NOT send to host
+	        }
+	    }
+
+		lastAID = cleanAid; // Update lastAID with clean value too
+
+		int cPos = screenModel.getCursorPos();
+		streamRecorder.stagePreSend(screenModel, cleanAid, includeProtected);
+		keyboardLocked = true;
+		updateStatusBar();
+		try {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			baos.write((byte) cleanAid);
+			baos.write(encode3270Address(cPos)[0]);
+			baos.write(encode3270Address(cPos)[1]);
+
+			if (cleanAid == AID_CLEAR)
+				resetReplyModeToDefault();
+
+			// 2. CRITICAL FIX: Handle Non-Contiguous AID Ranges
+			// PF1-PF9 are 0xF1-0xF9 (241-249)
+			// PF10-PF12 are 0x7A-0x7C (122-124)
+			boolean isPF1_9 = (cleanAid >= AID_PF1 && cleanAid <= AID_PF9);
+			boolean isPF10_12 = (cleanAid >= AID_PF10 && cleanAid <= AID_PF12);
+			boolean isPF13_24 = (cleanAid >= (AID_PF13 & 0xFF) && cleanAid <= (AID_PF24 & 0xFF));
+
+			boolean isReadMod = (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24 || cleanAid == AID_PA1
+					|| cleanAid == AID_PA2 || cleanAid == AID_PA3 || cleanAid == AID_CLEAR);
+
+			if (isReadMod) {
+				if (cleanAid == AID_ENTER || isPF1_9 || isPF10_12 || isPF13_24) {
+					int screenSize = screenModel.getSize();
+
+					// --- FIX: Detect Formatted vs Unformatted Screen ---
+					boolean isFormatted = false;
+					for (int i = 0; i < screenSize; i++) {
+						if (screenModel.isFieldStart(i)) {
+							isFormatted = true;
+							break;
+						}
+					}
+
+					if (isFormatted) {
+						// --- EXISTING LOGIC: Formatted Screen (Fields) ---
+						boolean extended = (currentReplyMode == ReplyMode.EXTENDED_FIELD);
+						for (int i = 0; i < screenSize; i++) {
+							// IBM GA23-0059: Read Modified returns only unprotected (input) fields.
+							// Protected fields with MDT set are host-placed data, not user input;
+							// sending them causes ISPF/XEDIT screen input error (e.g. error code 23).
+							// Read Modified All (includeProtected=true) returns every MDT field.
+							if (screenModel.isFieldStart(i) && (screenModel.getAttr(i) & 0x01) != 0
+									&& (includeProtected || !screenModel.isProtected(i))) {
+								int fieldStart = i;
+								int end = screenModel.findNextField(i);
+
+								// Find data bounds
+								int dataStart = fieldStart + 1;
+
+								while (dataStart < end && screenModel.getChar(dataStart) == '\0')
+									dataStart++;
+								int dataEnd = end - 1;
+								while (dataEnd > fieldStart && (screenModel.getChar(dataEnd) == '\0'))
+									// Fix: Don't trim spaces: || screenModel.getChar(dataEnd) == ' '))
+									dataEnd--;
+
+								if (dataStart <= dataEnd) {
+									baos.write(ORDER_SBA);
+									byte[] addr = encode3270Address(dataStart);
+									baos.write(addr[0]);
+									baos.write(addr[1]);
+
+									for (int j = dataStart; j <= dataEnd; j++) {
+										if (!screenModel.isFieldStart(j)) {
+											char c = screenModel.getChar(j);
+											if (c != '\0') {
+												if (c < 256 && ASCII_TO_EBCDIC[c] != 0)
+													baos.write(ASCII_TO_EBCDIC[c]);
+												else
+													baos.write(0x40);
+											}
+										}
+									}
+								}
+							}
+						}
+					} else {
+						// --- NEW LOGIC: Unformatted Screen (Raw Buffer) ---
+						// If the screen was cleared (e.g. by AID_CLEAR), there are no fields.
+						// We must send the raw buffer contents (excluding nulls) to satisfy hosts
+						// like z/VM that expect data packets for console input.
+						for (int i = 0; i < screenSize; i++) {
+							char c = screenModel.getChar(i);
+							if (c != '\0') {
+								if (c < 256 && ASCII_TO_EBCDIC[c] != 0)
+									baos.write(ASCII_TO_EBCDIC[c]);
+								else
+									baos.write(0x40);
+							}
+						}
+					}
+				}
+			}
+			sendData(baos.toByteArray());
+		} catch (IOException e) {
+		}
+		terminalPanel.repaint();
+	}
+	//here
+/*
 	public void sendAID(int aid) {
 		// FIX: Normalize to unsigned 0-255 to handle signed byte promotion
 		// 0xF8 as a byte is -8. We need it to be 248 to match the constants.
@@ -1853,7 +2436,7 @@ public class TN3270Session extends JPanel implements KeyListener {
 		}
 		terminalPanel.repaint();
 	}
-
+*/
 	private void eraseAllUnprotected() {
 		int size = screenModel.getSize();
 		for (int i = 0; i < size; i++) {
@@ -2198,6 +2781,195 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	private void sendQueryResponse() {
+	    try {
+	        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+	        int rows = screenModel.getAlternateRows();
+	        int cols = screenModel.getAlternateCols();
+
+	        // ---------------------------------------------------------------------
+	        // Query Reply Summary (QCODE 0x80)
+	        // Lists the Query Reply types this terminal will supply.
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x18,                         // length
+	            (byte) 0x81, (byte) 0x80,           // Query Reply + Summary
+	            (byte) 0x81,                       // Usable Area
+	            (byte) 0x84,                       // Character Sets
+	            (byte) 0x85,                       // Color
+	            (byte) 0x86,                       // Highlighting
+	            (byte) 0x87,                       // Reply Modes
+	            (byte) 0x88,                       // Field Outlining / OEM
+	            (byte) 0x8C,                       // (additional)
+	            (byte) 0x8F,                       // (additional)
+	            (byte) 0x95,                       // DDM
+	            (byte) 0x99,                       // (additional)
+	            (byte) 0x9D,                       // (additional)
+	            (byte) 0xA6,                       // Implicit Partition
+	            (byte) 0xA8,                       // (additional)
+	            (byte) 0xAB,                       // (additional)
+	            (byte) 0xB0, (byte) 0xB1, (byte) 0xB2,
+	            (byte) 0xB3, (byte) 0xB4, (byte) 0xB6
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Usable Area (QCODE 0x81)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x17,                         // length
+	            (byte) 0x81, (byte) 0x81,           // Query Reply + Usable Area
+	            0x01,                               // flags
+	            0x00,
+	            (byte) ((cols >> 8) & 0xFF), (byte) (cols & 0xFF),
+	            (byte) ((rows >> 8) & 0xFF), (byte) (rows & 0xFF),
+	            0x00, 0x00,
+	            0x02, 0x00, (byte) 0x89,
+	            0x00, 0x02, 0x00, (byte) 0x85,
+	            0x09, 0x10, 0x0A, 0x00
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Character Sets (QCODE 0x84)
+	        // Advertise both the default set and the APL set (0xF1).
+	        // Presence of set 0xF1 is what causes the host to send GE / SA CHARSET
+	        // sequences for box-drawing characters instead of bare 0x85.
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x08,                         // length
+	            (byte) 0x81, (byte) 0x84,           // Query Reply + Character Sets
+	            0x00,                               // flags
+	            0x0A, 0x00, 0x00                    // more flags / SDW
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Color (QCODE 0x85)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x1B,                         // length
+	            (byte) 0x81, (byte) 0x85,           // Query Reply + Color
+	            (byte) 0x82,                        // flags
+	            0x00, 0x16, 0x19,
+	            0x00, 0x00, 0x00, 0x00,
+	            0x07, 0x00, 0x00, 0x00, 0x02, (byte) 0xB9,
+	            0x00, 0x25, 0x01, 0x00,
+	            (byte) 0xF1, 0x03, (byte) 0xC3, 0x01, 0x36
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Highlighting (QCODE 0x86)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x16,                         // length
+	            (byte) 0x81, (byte) 0x86,           // Query Reply + Highlighting
+	            0x00, 0x08, 0x00,
+	            (byte) 0xF4, (byte) 0xF1, (byte) 0xF1,
+	            (byte) 0xF2, (byte) 0xF2, (byte) 0xF3, (byte) 0xF3,
+	            (byte) 0xF4, (byte) 0xF4, (byte) 0xF5, (byte) 0xF5,
+	            (byte) 0xF6, (byte) 0xF6, (byte) 0xF7, (byte) 0xF7
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Reply Modes (QCODE 0x87)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x0D,                         // length
+	            (byte) 0x81, (byte) 0x87,           // Query Reply + Reply Modes
+	            0x04, 0x00,
+	            (byte) 0xF0, (byte) 0xF1, (byte) 0xF1,
+	            (byte) 0xF2, (byte) 0xF2, (byte) 0xF4, (byte) 0xF4
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Field Outlining / OEM (QCODE 0x88)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x07,
+	            (byte) 0x81, (byte) 0x88,
+	            0x00, 0x01, 0x02
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Additional short replies (0x8C, etc.)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x07,
+	            (byte) 0x81, (byte) 0x8C,
+	            0x00, 0x00, 0x00
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // DDM (QCODE 0x95)
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x0C,
+	            (byte) 0x81, (byte) 0x95,
+	            0x00, 0x00,
+	            0x09, (byte) 0xC4,                 // LIMIN
+	            0x09, (byte) 0xC4,                 // LIMOUT
+	            0x01,                              // NSS
+	            0x01                               // DDMSS
+	        });
+
+	        // ---------------------------------------------------------------------
+	        // Additional replies (0x99, Implicit Partition 0xA6, etc.)
+	        // Kept from the original implementation for compatibility.
+	        // ---------------------------------------------------------------------
+	        baos.write(new byte[] {
+	            0x00, 0x06,
+	            (byte) 0x81, (byte) 0x99,
+	            0x00, 0x00
+	        });
+
+	        baos.write(new byte[] {
+	            0x00, 0x11,
+	            (byte) 0x81, (byte) 0xA6,
+	            0x00, 0x00, 0x0B, 0x01, 0x00,
+	            (byte) ((cols >> 8) & 0xFF), (byte) (cols & 0xFF),
+	            0x00, 0x18,
+	            (byte) ((cols >> 8) & 0xFF), (byte) (cols & 0xFF),
+	            (byte) ((rows >> 8) & 0xFF), (byte) (rows & 0xFF)
+	        });
+
+	        // Device characteristics / name / remaining replies from original
+	        baos.write(new byte[] {
+	            0x00, 0x1A,
+	            (byte) 0x81, (byte) 0x8F,
+	            0x00, 0x00,
+	            (byte) 0xA3, (byte) 0x95, (byte) 0xF3, (byte) 0xF2,
+	            (byte) 0xF7, (byte) 0xF0, 0x40, 0x40,
+	            (byte) 0xC3, (byte) 0x93, (byte) 0x81, (byte) 0xA4,
+	            (byte) 0x84, (byte) 0x85, (byte) 0xC1, (byte) 0xC9,
+	            0x04, 0x01, 0x00, (byte) 0xAE
+	        });
+
+	        baos.write(new byte[] {
+	            0x00, 0x19,
+	            (byte) 0x81, (byte) 0x9D,
+	            0x00, 0x01, 0x0E, 0x00, 0x0E, 0x00, 0x0F, 0x00, (byte) 0xAE,
+	            (byte) 0xC3, (byte) 0x93, (byte) 0x81, (byte) 0xA4,
+	            (byte) 0x84, (byte) 0x85, 0x61, (byte) 0xC1, (byte) 0xC9,
+	            0x40, 0x40, 0x40
+	        });
+
+	        baos.write(new byte[] {
+	            0x00, 0x09,
+	            (byte) 0x81, (byte) 0xA8,
+	            0x02, 0x00, (byte) 0xF0, (byte) 0xFF, (byte) 0xFF
+	        });
+
+	        baos.write(new byte[] {
+	            0x00, 0x11,
+	            (byte) 0x81, (byte) 0xAB,
+	            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	            0x02, 0x00, 0x00, 0x04, 0x01, 0x00, 0x01
+	        });
+
+	        sendStructuredFieldResponse(baos.toByteArray());
+	    } catch (IOException e) {
+	        // intentionally quiet
+	    }
+	}
+	
+	private void sendQueryResponseTerse() {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			int r = screenModel.getAlternateRows();
@@ -2252,13 +3024,39 @@ public class TN3270Session extends JPanel implements KeyListener {
 	}
 
 	private void sendData(byte[] data) throws IOException {
+		streamRecorder.recordOutbound(data, tn3270eMode, screenModel.getRows(), screenModel.getCols());
 		ByteArrayOutputStream fullPacket = new ByteArrayOutputStream();
 		if (tn3270eMode) {
-			fullPacket.write(TN3270E_DT_3270_DATA);
-			fullPacket.write(0);
-			fullPacket.write(0);
-			fullPacket.write(0);
-			fullPacket.write(0);
+			// We're in TN3270E mode - add 5-byte header
+			//boolean isResponse = false;
+            
+            //if (isResponse && responses) {
+			if (supportsResponses) {
+                // ===== RESPONSE Format (for Query Response, BIND response, etc.) =====
+                // Format: [0x02][Flags][Flags][Length MSB][Length LSB][Data][IAC EOR]
+                fullPacket.write(0x02);  // DataType: RESPONSE
+                fullPacket.write(0x00);  // Response flags byte 1
+                fullPacket.write(0x00);  // Response flags byte 2
+                
+                // Length: actual data length
+                int len = data.length;
+                fullPacket.write((len >> 8) & 0xFF);  // Length MSB
+                fullPacket.write(len & 0xFF);         // Length LSB
+
+                logger.info("═══ Outbound TN3270E Packet (RESPONSE) ═══");
+                logger.info(String.format("Header: [0x02][0x00][0x00][0x%02X][0x%02X]",
+                                         (len >> 8) & 0xFF, len & 0xFF));
+                logger.info("DataType: 0x02 (RESPONSE)");
+                logger.info("Length: " + len + " bytes");
+                logger.info("Total: " + (len + 7) + " bytes (header + data + IAC EOR)");
+
+            } else {
+            	fullPacket.write(TN3270E_DT_3270_DATA);
+            	fullPacket.write(0);
+            	fullPacket.write(0);
+            	fullPacket.write(0);
+				fullPacket.write(0);
+            }
 		}
 		for (byte b : data) {
 			fullPacket.write(b);
@@ -3404,6 +4202,12 @@ public class TN3270Session extends JPanel implements KeyListener {
 	// =======================================================================
 
 	public void keyPressed(KeyEvent e) {
+	    // === STREAM RECORDER DUMP HOTKEY: Ctrl+Shift+D ===
+	    if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_D) {
+	        dumpStreams();
+	        e.consume();
+	        return;
+	    }
 	    // === SCROLL-BACK INTERCEPTION (physical keyboard) ===
 	    // Resolve the keystroke to a 3270 AID and compare against the
 	    // configured scroll AIDs.  This must run before the existing
@@ -3919,7 +4723,11 @@ public class TN3270Session extends JPanel implements KeyListener {
 			String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
 			if (text == null)
 				return;
-			for (char c : text.toCharArray()) {
+			
+			// Normalize CRLF (\r\n) and standalone CR (\r) to LF (\n)
+		    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+			
+			for (char c : normalized.toCharArray()) {
 				if (c == '\n') {
 					tabToNextField();
 					continue;

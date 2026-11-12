@@ -554,9 +554,11 @@ public class TerminalPanel extends JPanel implements Scrollable {
 				g2d.setColor(fg);
 
 				// Display vertical bars as tall lines
-				if (c == '|') {
-					int centerX = x + (charWidth / 2);
-					g2d.drawLine(centerX, y, centerX, y + charHeight);
+				if (c == '|' || c == '\u2502' || c == '¦') {
+					int centerX = x + (charWidth / 2);         
+					//g2d.drawLine(centerX, y, centerX, y + charHeight);
+					int barWidth = Math.max(1, charWidth / 5);   // slight thickness helps
+					g2d.fillRect(centerX - barWidth/2, y, barWidth, charHeight);
 					continue; // Skip standard string drawing
 				}
 
@@ -884,8 +886,37 @@ public class TerminalPanel extends JPanel implements Scrollable {
 						// Map "Protected Numeric Blue" to Yellow
 						if (isProtected && isNumeric) {
 							fg = screenModel.getPalette()[6]; // Yellow
+							System.out.println("TerminalPanel: Fudged 'Protected Numeric Blue' to Yellow");
 						}
 					}
+				}
+				//temp 11/11/26
+				// Generic Field-Level Semantic Remapping
+				if (fieldStart >= 0) {
+				    int fieldColor = extColors[fieldStart] & 0xFF;
+				    byte fieldAttribute = attr[fieldStart];
+
+				    boolean isProtected = (fieldAttribute & 0x20) != 0;
+				    boolean isHighIntensity = (fieldAttribute & 0x08) != 0;
+				    boolean isNumeric = (fieldAttribute & 0x10) != 0;
+
+				    if (fieldColor == 1) { // Extended Blue (0xF1)
+				        // Generic rule: If a field is protected and flagged for high visibility/structure 
+				        // (e.g., protected + high intensity or protected + numeric UI fields),
+				        // elevate it to a legible contrast color (Yellow or White) rather than dark blue.
+				        if (isProtected && (isHighIntensity || isNumeric)) {
+				            fg = palette[6]; // Yellow (or palette[7] for White)
+				            System.out.println("TerminalPanel: Changed color to Yellow");
+				        } else {
+				            fg = palette[fieldColor];
+				            System.out.printf("TerminalPanel: Changed color to %02x (fieldColor was Blue)", fg);
+				        }
+				    } else if (fieldColor > 0 && fieldColor < palette.length) {
+				        fg = palette[fieldColor];
+				        System.out.printf("TerminalPanel: Changed color to %02x", fg);
+				    //} else {
+				       // fg = baseFg;
+				    }
 				}
 
 				g2d.setColor(fg);
@@ -894,7 +925,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
 				// new
 				// If it's a pipe AND we are in APL context, make it tall
 				// if (c == '|' && isAPL) {
-				if (c == '|') { // Just display vertical bars as "tall", no matter what
+				if (c == '|' || c == '\u2502' || c == '¦') { // Just display vertical bars as "tall", no matter what
 					/*
 					 * // OPTION A: Swap to Unicode Box Drawing char // (Simplest, assumes font
 					 * supports U+2502) // c = '\u2502';

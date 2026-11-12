@@ -43,4 +43,27 @@ public class TelnetConstants {
 	public static final int TN3270E_OP_REJECT = 0x06;
 	public static final int TN3270E_OP_REQUEST = 0x07;
 	public static final int TN3270E_OP_SEND = 0x08;
+	
+	// -----------------------------------------------------------------------
+	// Telnet Option
+	// -----------------------------------------------------------------------
+	public static final int TELOPT_TN3270E = 40;
+
+	// -----------------------------------------------------------------------
+	// TN3270E Subcommands
+	// -----------------------------------------------------------------------
+	public static final int TN3270E_SEND        = 0x01;
+	public static final int TN3270E_IS          = 0x02;
+	public static final int TN3270E_SUPPORT     = 0x03;
+	public static final int TN3270E_DEVICETYPE  = 0x04;
+	public static final int TN3270E_FUNCTIONS   = 0x05;
+
+	// -----------------------------------------------------------------------
+	// TN3270E Functions
+	// -----------------------------------------------------------------------
+	public static final int FUNC_SCS_CTL_CODES  = 0x00;
+	public static final int FUNC_BIND_IMAGE     = 0x01;
+	public static final int FUNC_SYSREQ         = 0x02;
+	public static final int FUNC_DATA_STREAM_CTL= 0x03;
+	public static final int FUNC_RESPONSES      = 0x04;
 }
