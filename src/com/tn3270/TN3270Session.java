@@ -1394,7 +1394,246 @@ public class TN3270Session extends JPanel implements KeyListener {
 		}
 	}
 	
-	private void processOrders(byte[] data, int offset, int initialPos) {
+
+private void processOrders(byte[] data, int offset, int initialPos) {
+    int p = initialPos;
+    int i = offset;
+    int[] idx = { 0 };
+    char c;
+    int bufLen = screenModel.getSize();
+
+    // Running character attributes (SA state)
+    //byte activeColor = screenModel.getCurrentColor();
+    //byte activeHighlight = screenModel.getCurrentHighlight();
+    //byte activeCharset = screenModel.getCurrentCharset();
+    
+ // Running character attributes (SA state).
+ // Write-type commands reset these attributes to defaults.
+ byte activeColor = 0;
+ byte activeHighlight = 0;
+ byte activeCharset = 0;
+
+ screenModel.setCurrentColor((byte) 0);
+ screenModel.setCurrentHighlight((byte) 0);
+ screenModel.setCurrentCharset((byte) 0);
+
+    while (i < data.length) {
+        int b = data[i++] & 0xFF;
+
+        if (b == ORDER_SF) {
+            if (i < data.length) {
+                screenModel.setAttr(p, data[i++]);
+                screenModel.setChar(p, ' ');
+
+                // SF has no extended field attributes
+                screenModel.setExtendedColor(p, (byte) 0);
+                screenModel.setHighlight(p, (byte) 0);
+                screenModel.setCharset(p, (byte) 0);
+
+                // SA state is NOT reset by SF
+                screenModel.setCurrentColor(activeColor);
+                screenModel.setCurrentHighlight(activeHighlight);
+                screenModel.setCurrentCharset(activeCharset);
+
+                p = (p + 1) % bufLen;
+            }
+
+        } else if (b == ORDER_SFE) {
+            if (i < data.length) {
+                int count = data[i++] & 0xFF;
+
+                byte a = 0;
+                byte col = 0;
+                byte hl = 0;
+                byte cs = 0;
+
+                //boolean hasCs = false;
+
+                for (int k = 0; k < count; k++) {
+                    if (i + 1 >= data.length)
+                        break;
+
+                    int t = data[i++] & 0xFF;
+                    int v = data[i++] & 0xFF;
+
+                    if (t == ATTR_FIELD) {
+                        a = (byte) v;
+
+                    } else if (t == ATTR_FOREGROUND) {
+                        col = normalizeColor((byte) v);
+
+                    } else if (t == ATTR_HIGHLIGHTING) {
+                        hl = (byte) v;
+
+                    } else if (t == ATTR_CHAR_SET) {
+                        cs = (byte) v;
+                        //hasCs = true;
+                    }
+                }
+
+                // SFE attributes belong to the field attribute cell.
+                // Do not inherit character-level SA state here.
+                screenModel.setChar(p, ' ');
+                screenModel.setAttr(p, a);
+                screenModel.setExtendedColor(p, col);
+                screenModel.setHighlight(p, hl);
+                screenModel.setCharset(p, cs);
+
+                // An explicitly specified SFE charset establishes
+                // the charset for subsequent characters in this field.
+                //if (hasCs) {
+                //    activeCharset = cs;
+                //    screenModel.setCurrentCharset(cs);
+                //}
+
+                p = (p + 1) % bufLen;
+            }
+
+        } else if (b == ORDER_SBA) {
+            if (i + 1 < data.length) {
+                p = decode3270Address(data[i], data[i + 1]);
+                i += 2;
+            }
+
+        } else if (b == ORDER_IC) {
+            screenModel.setCursorPos(p);
+
+        } else if (b == ORDER_PT) {
+            int start = p;
+
+            while (true) {
+                p = (p + 1) % bufLen;
+
+                if (screenModel.isFieldStart(p))
+                    continue;
+
+                if (!screenModel.isProtected(p))
+                    break;
+
+                if (p == start)
+                    break;
+            }
+
+        } else if (b == ORDER_RA) {
+            if (i + 1 < data.length) {
+                int end = decode3270Address(data[i], data[i + 1]);
+
+                idx[0] = i + 2;
+                c = fetchDisplayChar(data, idx);
+                i = idx[0];
+
+                while (p != end) {
+                    screenModel.setChar(p, c);
+                    screenModel.setAttr(p, (byte) 0);
+                    screenModel.setExtendedColor(p, activeColor);
+                    screenModel.setHighlight(p, activeHighlight);
+                    screenModel.setCharset(p, activeCharset);
+
+                    p = (p + 1) % bufLen;
+                }
+            }
+
+        } else if (b == ORDER_EUA) {
+            if (i + 1 < data.length) {
+                int end = decode3270Address(data[i], data[i + 1]);
+                i += 2;
+
+                if (p == end) {
+                    for (int k = 0; k < bufLen; k++) {
+                        if (!screenModel.isProtected(k)
+                                && !screenModel.isFieldStart(k)) {
+                            screenModel.setChar(k, '\0');
+                            screenModel.setExtendedColor(k, (byte) 0);
+                            screenModel.setHighlight(k, (byte) 0);
+                            screenModel.setCharset(k, (byte) 0);
+                        }
+                    }
+                } else {
+                    while (p != end) {
+                        if (!screenModel.isProtected(p)
+                                && !screenModel.isFieldStart(p)) {
+                            screenModel.setChar(p, '\0');
+                            screenModel.setExtendedColor(p, (byte) 0);
+                            screenModel.setHighlight(p, (byte) 0);
+                            screenModel.setCharset(p, (byte) 0);
+                        }
+
+                        p = (p + 1) % bufLen;
+                    }
+                }
+            }
+
+        } else if (b == ORDER_SA) {
+            if (i + 1 < data.length) {
+                int t = data[i++] & 0xFF;
+                byte v = data[i++];
+
+                if (t == ATTR_FOREGROUND) {
+                    activeColor = normalizeColor(v);
+                    screenModel.setCurrentColor(activeColor);
+
+                } else if (t == ATTR_HIGHLIGHTING) {
+                    activeHighlight = v;
+                    screenModel.setCurrentHighlight(activeHighlight);
+
+                } else if (t == ATTR_CHAR_SET) {
+                    activeCharset = v;
+                    screenModel.setCurrentCharset(activeCharset);
+
+                } else if (t == 0x00 && (v & 0xFF) == 0x00) {
+                    // SA Reset All Attributes
+                    activeColor = 0;
+                    activeHighlight = 0;
+                    activeCharset = 0;
+
+                    screenModel.setCurrentColor((byte) 0);
+                    screenModel.setCurrentHighlight((byte) 0);
+                    screenModel.setCurrentCharset((byte) 0);
+                }
+            }
+
+        } else if (b == ORDER_GE) {
+            if (i < data.length) {
+                byte val = data[i++];
+
+                if ((val & 0xFF) == 0x4F) {
+                    c = '|';
+                } else {
+                    c = EBCDIC_TO_APL[val & 0xFF];
+                }
+
+                screenModel.setChar(p, c);
+                screenModel.setAttr(p, (byte) 0);
+                screenModel.setExtendedColor(p, activeColor);
+                screenModel.setHighlight(p, activeHighlight);
+                screenModel.setCharset(p, CHARSET_APL);
+
+                p = (p + 1) % bufLen;
+            }
+
+        } else {
+            if (b == 0x4F) {
+                c = '|';
+            } else if ((activeCharset & 0xFF)
+                    == (CHARSET_APL & 0xFF)) {
+                c = EBCDIC_TO_APL[b];
+            } else {
+                c = EBCDIC_TO_ASCII[b];
+            }
+
+            screenModel.setChar(p, c);
+            screenModel.setAttr(p, (byte) 0);
+            screenModel.setExtendedColor(p, activeColor);
+            screenModel.setHighlight(p, activeHighlight);
+            screenModel.setCharset(p, activeCharset);
+
+            p = (p + 1) % bufLen;
+        }
+    }
+}
+
+	
+	private void processOrdersOlder(byte[] data, int offset, int initialPos) {
         int p = initialPos; // FIX: Use passed initial position
         int i = offset;
         int[] idx = { 0 };
@@ -2013,8 +2252,162 @@ public class TN3270Session extends JPanel implements KeyListener {
 			return (byte) (raw - 0xF0);
 		return raw;
 	}
+	
 
-	private void sendReadBuffer() {
+private void sendReadBuffer() {
+    try {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        baos.write(lastAID & 0xFF);
+
+        int cPos = screenModel.getCursorPos();
+        byte[] addr = encode3270Address(cPos);
+        baos.write(addr[0]);
+        baos.write(addr[1]);
+
+        int size = screenModel.getSize();
+
+        byte[] attrs = screenModel.getAttributes();
+        char[] chars = screenModel.getBuffer();
+        byte[] colors = screenModel.getExtendedColors();
+        byte[] highlights = screenModel.getHighlight();
+        byte[] charsets = screenModel.getCharsets();
+
+        // Current SA state in the outgoing data stream
+        byte runningColor = 0;
+        byte runningHighlight = 0;
+        byte runningCharset = 0;
+
+        for (int i = 0; i < size; i++) {
+
+            if (screenModel.isFieldStart(i)) {
+                byte a = attrs[i];
+                byte c = colors[i];
+                byte h = highlights[i];
+                byte cs = charsets[i];
+
+                // IMPORTANT:
+                // Do not reset running SA state here.
+                // SA state persists across field boundaries.
+
+                if (currentReplyMode == ReplyMode.CHARACTER
+                        && (c != 0 || h != 0 || cs != 0)) {
+
+                    // Extended field attribute cell
+                    baos.write(ORDER_SFE);
+
+                    int count = 1;
+                    if (c != 0) count++;
+                    if (h != 0) count++;
+                    if (cs != 0) count++;
+
+                    baos.write(count);
+
+                    // Basic field attribute
+                    baos.write(ATTR_FIELD);
+                    baos.write(a);
+
+                    // Foreground color
+                    if (c != 0) {
+                        baos.write(ATTR_FOREGROUND);
+                        baos.write(c);
+                    }
+
+                    // Highlighting
+                    if (h != 0) {
+                        baos.write(ATTR_HIGHLIGHTING);
+                        baos.write(h);
+                    }
+
+                    // Character set
+                    if (cs != 0) {
+                        baos.write(ATTR_CHAR_SET);
+                        baos.write(cs);
+                    }
+
+                } else {
+                    // Standard field attribute cell
+                    baos.write(ORDER_SF);
+                    baos.write(a);
+                }
+
+            } else {
+
+                // Character data
+                if (currentReplyMode == ReplyMode.CHARACTER) {
+                    byte c = colors[i];
+                    byte h = highlights[i];
+                    byte cs = charsets[i];
+
+                    // Color SA
+                    if (c != runningColor) {
+                        baos.write(ORDER_SA);
+                        baos.write(ATTR_FOREGROUND);
+                        baos.write(c);
+                        runningColor = c;
+                    }
+
+                    // Highlight SA
+                    if (h != runningHighlight) {
+                        baos.write(ORDER_SA);
+                        baos.write(ATTR_HIGHLIGHTING);
+                        baos.write(h);
+                        runningHighlight = h;
+                    }
+
+                    // Charset SA
+                    if (cs != runningCharset) {
+                        baos.write(ORDER_SA);
+                        baos.write(ATTR_CHAR_SET);
+                        baos.write(cs);
+                        runningCharset = cs;
+                    }
+                }
+
+                // Encode the character
+                char ch = chars[i];
+                byte ebcdicByte = 0;
+                byte cs = charsets[i];
+
+                if (cs == CHARSET_APL) {
+                    // Reverse lookup in EBCDIC_TO_APL
+                    for (int k = 0; k < 256; k++) {
+                        if (EBCDIC_TO_APL[k] == ch) {
+                            ebcdicByte = (byte) k;
+                            break;
+                        }
+                    }
+
+                    if (ebcdicByte == 0)
+                        ebcdicByte = (byte) 0x40;
+
+                } else {
+                    if (ch < 256) {
+                        ebcdicByte = ASCII_TO_EBCDIC[ch];
+                    } else {
+                        ebcdicByte = (byte) 0x40;
+                    }
+                }
+
+                if (ebcdicByte != 0) {
+                    baos.write(ebcdicByte);
+                } else {
+                    baos.write(0x00);
+                }
+            }
+        }
+
+        sendData(baos.toByteArray());
+        keyboardLocked = true;
+        updateStatusBar();
+
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+
+
+	private void sendReadBufferOlder() {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			baos.write((byte) lastAID);

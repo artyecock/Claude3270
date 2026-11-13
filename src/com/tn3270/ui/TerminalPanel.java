@@ -499,6 +499,7 @@ public class TerminalPanel extends JPanel implements Scrollable {
 					} else {
 						fg = baseFg;
 					}
+					
 					// System.out.println("Pos: " + pos + ", Color attribute: " + charColor + ",
 					// Rendered color: " + fg + " (Base color " + baseFg +")");
 					// System.out.println(String.format("Writing char '%c' at pos=%d Color
@@ -507,7 +508,8 @@ public class TerminalPanel extends JPanel implements Scrollable {
 					// Handle highlighting
 					int hl = highlight[pos] & 0xFF;
 					if (hl == 0 && fieldStart >= 0)
-						hl = highlight[fieldStart];
+						//hl = highlight[fieldStart];
+					    hl = highlight[fieldStart] & 0xFF;
 					if (hl == 0xF1 && !blinkVisible)
 						c = ' ';
 					if (hl == 0xF2)
