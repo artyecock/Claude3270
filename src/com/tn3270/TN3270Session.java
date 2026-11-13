@@ -13,6 +13,7 @@ import static com.tn3270.constants.ProtocolConstants.AID_PF13;
 import static com.tn3270.constants.ProtocolConstants.AID_PF19;
 import static com.tn3270.constants.ProtocolConstants.AID_PF20;
 import static com.tn3270.constants.ProtocolConstants.AID_PF24;
+import static com.tn3270.constants.ProtocolConstants.AID_SYSREQ;
 import static com.tn3270.constants.ProtocolConstants.PF_AID;
 import static com.tn3270.constants.ProtocolConstants.AID_STRUCTURED_FIELD;
 import static com.tn3270.constants.ProtocolConstants.ATTR_CHAR_SET;
@@ -2605,6 +2606,16 @@ private void sendReadBuffer() {
 		updateStatusBar();
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			
+			// AIDs that never carry buffer data
+			if (aid == AID_CLEAR || aid == AID_PA1 || aid == AID_PA2 || aid == AID_PA3
+			        || aid == AID_SYSREQ) {
+			    baos.write(aid);
+			    // optional: still send cursor for some hosts, but NEVER field data
+			    sendData(baos.toByteArray());   // just the one-byte AID
+			    return;
+			}
+			
 			baos.write((byte) cleanAid);
 			baos.write(encode3270Address(cPos)[0]);
 			baos.write(encode3270Address(cPos)[1]);
@@ -2634,7 +2645,128 @@ private void sendReadBuffer() {
 							break;
 						}
 					}
+					
+					if (isFormatted) {
+					    int size = screenModel.getSize();
 
+					    for (int i = 0; i < size; i++) {
+					        if (!screenModel.isFieldStart(i))
+					            continue;
+					        if ((screenModel.getAttr(i) & 0x01) == 0)          // MDT not set
+					            continue;
+					        if (!includeProtected && screenModel.isProtected(i))
+					            continue;
+
+					        // Field runs from (i+1) to the byte before the next field attribute
+					        int nextField = screenModel.findNextField(i);
+					        int fieldLen  = (nextField - i + size) % size;     // includes the attribute byte
+					        if (fieldLen <= 1)
+					            continue;                                      // attribute only, no data
+					        
+					        int dataStart = (i + 1) % size;                 // ALWAYS attr+1
+				            int dataLen   = fieldLen - 1;
+
+				            // Collect only non-null characters (GA23-0059-4 null suppression)
+				            ByteArrayOutputStream fieldData = new ByteArrayOutputStream();
+				            int pos = dataStart;
+				            for (int k = 0; k < dataLen; k++) {
+				                if (!screenModel.isFieldStart(pos)) {
+				                    char c = screenModel.getChar(pos);
+				                    if (c != '\0') {
+				                        if (c < 256 && ASCII_TO_EBCDIC[c] != 0)
+				                            fieldData.write(ASCII_TO_EBCDIC[c]);
+				                        else
+				                            fieldData.write(0x40);
+				                    }
+				                    // nulls are omitted
+				                }
+				                pos = (pos + 1) % size;
+				            }
+
+				            byte[] chars = fieldData.toByteArray();
+				            if (chars.length == 0)
+				                continue;                                   // all nulls
+				            
+				            baos.write(ORDER_SBA);
+				            byte[] addr = encode3270Address(dataStart);     // attr+1
+				            baos.write(addr[0]);
+				            baos.write(addr[1]);
+				            baos.write(chars);
+/*
+					        int dataFirst = (i + 1) % size;                    // first data position
+					        int dataLast  = (i + fieldLen - 1) % size;         // last data position
+
+					        // ---- find first non-NUL ----
+					        int start = dataFirst;
+					        int remain = fieldLen - 1;
+					        while (remain > 0 && screenModel.getChar(start) == '\0') {
+					            start = (start + 1) % size;
+					            remain--;
+					        }
+					        if (remain == 0)
+					            continue;                                      // field is entirely NUL
+
+					        // ---- find last non-NUL ----
+					        int end = dataLast;
+					        int len = remain;                                  // still counts from 'start'
+					        while (len > 0 && screenModel.getChar(end) == '\0') {
+					            end = (end - 1 + size) % size;
+					            len--;
+					        }
+
+					        // ---- emit SBA + data ----
+					        // 11/13/26 debug:
+					        System.out.printf("RM fieldStart=%d dataStart=%d dataEnd=%d len=%d nextField=%d%n",
+					        	    i, start, end, len, nextField);
+					        baos.write(ORDER_SBA);
+					        byte[] addr = encode3270Address(start);
+					        baos.write(addr[0]);
+					        baos.write(addr[1]);
+
+					        int pos = start;
+					        for (int k = 0; k < len; k++) {
+					            if (!screenModel.isFieldStart(pos)) {
+					                char c = screenModel.getChar(pos);
+					                if (c == '\0') {
+					                    baos.write(0x40);                      // embedded NUL → space
+					                } else if (c < 256 && ASCII_TO_EBCDIC[c] != 0) {
+					                    baos.write(ASCII_TO_EBCDIC[c]);
+					                } else {
+					                    baos.write(0x40);
+					                }
+					            }
+					            pos = (pos + 1) % size;
+					        }
+					        */
+					    }
+					}
+				} else {
+				    // Unformatted screen – send buffer contents with null suppression
+				    int size = screenModel.getSize();
+
+				    // Find first and last non-NUL so we can suppress leading/trailing nulls
+				    int first = -1, last = -1;
+				    for (int i = 0; i < size; i++) {
+				        if (screenModel.getChar(i) != '\0') {
+				            if (first < 0) first = i;
+				            last = i;
+				        }
+				    }
+
+				    if (first >= 0) {
+				        for (int i = first; i <= last; i++) {
+				            char c = screenModel.getChar(i);
+				            if (c == '\0') {
+				                baos.write(0x40);               // embedded NUL → space
+				            } else if (c < 256 && ASCII_TO_EBCDIC[c] != 0) {
+				                baos.write(ASCII_TO_EBCDIC[c]);
+				            } else {
+				                baos.write(0x40);
+				            }
+				        }
+				    }
+				}
+				/*	
 					if (isFormatted) {
 						// --- EXISTING LOGIC: Formatted Screen (Fields) ---
 						boolean extended = (currentReplyMode == ReplyMode.EXTENDED_FIELD);
@@ -2643,8 +2775,10 @@ private void sendReadBuffer() {
 							// Protected fields with MDT set are host-placed data, not user input;
 							// sending them causes ISPF/XEDIT screen input error (e.g. error code 23).
 							// Read Modified All (includeProtected=true) returns every MDT field.
+							
 							if (screenModel.isFieldStart(i) && (screenModel.getAttr(i) & 0x01) != 0
 									&& (includeProtected || !screenModel.isProtected(i))) {
+								
 								int fieldStart = i;
 								int end = screenModel.findNextField(i);
 
@@ -2677,6 +2811,63 @@ private void sendReadBuffer() {
 									}
 								}
 							}
+			
+							if (screenModel.isFieldStart(i) && (screenModel.getAttr(i) & 0x01) != 0
+							        && (includeProtected || !screenModel.isProtected(i))) {
+
+							    int fieldStart = i;
+							    int size = screenModel.getSize();          // 1920
+							    int nextField = screenModel.findNextField(i);
+
+							    // Length of this field (circular)
+							    int fieldLen = (nextField - fieldStart + size) % size;
+							    if (fieldLen == 0) fieldLen = size;       // whole screen is one field
+
+							    // First data position (skip the attribute byte itself)
+							    int dataStart = (fieldStart + 1) % size;
+
+							    // Last data position
+							    int dataEnd = (fieldStart + fieldLen - 1) % size;
+
+							    // Trim leading NULs
+							    int pos = dataStart;
+							    int trimmedLen = fieldLen - 1;            // already skipped attr
+							    while (trimmedLen > 0 && screenModel.getChar(pos) == '\0') {
+							        pos = (pos + 1) % size;
+							        trimmedLen--;
+							    }
+							    dataStart = pos;
+
+							    // Trim trailing NULs
+							    pos = dataEnd;
+							    while (trimmedLen > 0 && screenModel.getChar(pos) == '\0') {
+							        pos = (pos - 1 + size) % size;
+							        trimmedLen--;
+							    }
+							    dataEnd = pos;
+
+							    if (trimmedLen > 0) {
+							        baos.write(ORDER_SBA);
+							        byte[] addr = encode3270Address(dataStart);
+							        baos.write(addr[0]);
+							        baos.write(addr[1]);
+
+							        // Emit the characters in order, handling wrap if necessary
+							        pos = dataStart;
+							        for (int k = 0; k < trimmedLen; k++) {
+							            if (!screenModel.isFieldStart(pos)) {
+							                char c = screenModel.getChar(pos);
+							                if (c != '\0') {
+							                    if (c < 256 && ASCII_TO_EBCDIC[c] != 0)
+							                        baos.write(ASCII_TO_EBCDIC[c]);
+							                    else
+							                        baos.write(0x40);
+							                }
+							            }
+							            pos = (pos + 1) % size;
+							        }
+							    }
+							}
 						}
 					} else {
 						// --- NEW LOGIC: Unformatted Screen (Raw Buffer) ---
@@ -2693,7 +2884,9 @@ private void sendReadBuffer() {
 							}
 						}
 					}
-				}
+					*/
+				//}
+				
 			}
 			sendData(baos.toByteArray());
 		} catch (IOException e) {
