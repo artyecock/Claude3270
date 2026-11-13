@@ -1,3 +1,17 @@
+Compiling: (from the "src/" directory)
+
+# Compile ajj Java programs
+javac -d . com/tn3270/**/*.java
+
+# Build the Jar file
+jar cvfm TN3270.jar manifest.txt com
+
+# Run the Jar file
+java -jar TN3270.jar 
+
+
+To create an Executable:
+
 For Powershell, use:
 
 jpackage --name "TN3270Emulator" ^
